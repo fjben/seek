@@ -307,23 +307,31 @@ def getExplanations(path_graph, path_label_classes, path_embedding_classes, targ
     # g, dic_labels_classes = construct_kg(ontology_file_path, annotations_file_path, type)
     # G = nx.DiGraph()
     # _rdflib_to_networkx_graph(g, G, calc_weights=False, edge_attrs=lambda s, p, o: {})
-    G = nx.read_gpickle(path_graph)
+    G = nx.read_gpickle(path_graph) ## read KG
+    ## read dictionary for go terms
+    ## not needed for AIFB because meaning is explicit in node name
     with open(path_label_classes, 'rb') as label_classes:
         dic_labels_classes = pickle.load(label_classes)
 
+    ## embeddings for each go term
+    ## replace with embeddings for each neighbour (set of neighbours found for all labelled nodes)
     dic_emb_classes = eval(open(path_embedding_classes, 'r').read())
 
-    ml_model = pickle.load(open(path_file_model + alg + "/Model_" + alg + ".pickle", "rb"))
+    ml_model = pickle.load(open(path_file_model + alg + "/Model_" + alg + ".pickle", "rb")) ## read ML model
 
-    ent1, ent2 = target_pair
+    ent1, ent2 = target_pair ## unpack entities in entity pair, replace with target_entity to explain
 
     start = time.time()
 
     ensure_dir(path_explanations + alg + "/")
-    file_predictions = open(path_explanations + alg + "/" + ent1 + "-" + ent2 + ".txt", 'w')
+    file_predictions = open(path_explanations + alg + "/" + ent1 + "-" + ent2 + ".txt", 'w') ## replace ent1-ent2 with ent
+    ## replace DCA with Neighbour, replace binary with multiclass
     file_predictions.write('DCA\tRemoving\tPredicted-label\tProb-class0\tProb-class1\n')
 
+    ## extract all common ancestors
+    ## replace with all_neighbours
     all_common_ancestors = list(nx.descendants(G, rdflib.term.URIRef(ent1)) & nx.descendants(G, rdflib.term.URIRef(ent2)))
+    ## ignore, no need to find disjoint_common_ancestors for entity to explain
     disjoint_common_ancestors, parents = [], {}
     for anc in all_common_ancestors:
         parents[anc] = list(nx.descendants(G, anc))
@@ -340,8 +348,10 @@ def getExplanations(path_graph, path_label_classes, path_embedding_classes, targ
     necessary_explan, sufficient_explan = [], []
     results, results_without, results_only = [], [], []
 
+    ## get all dcas embeddings and obtain the average
     all_vectors = []
     for dca in disjoint_common_ancestors:
+        ## embeddings of the dcas, replace with embeddings of the neighbours
         all_vectors.append(dic_emb_classes[str(dca)])
     if len(all_vectors) == 0:
         all_avg_vectors = np.array([0 for i in range(n_embeddings)])
@@ -351,11 +361,15 @@ def getExplanations(path_graph, path_label_classes, path_embedding_classes, targ
         all_array_vectors = np.array(all_vectors)
         all_avg_vectors = np.average(all_array_vectors, 0)
 
+    ## obtain the prediction for the dcas embeddings average
     X_test_original = [all_avg_vectors.tolist()]
     pred_original = ml_model.predict(X_test_original).tolist()[0]
     proba_pred_original = ml_model.predict_proba(X_test_original).tolist()[0]
+    ## replace binary with multiclass
     file_predictions.write('All' + '\t' + 'NA' + '\t' + str(pred_original) + '\t' + str(proba_pred_original[0]) + '\t' + str(proba_pred_original[1]) + '\n')
 
+    ## for each dca, obtain the prediction for all dcas except the dca and obtain the prediction for the dca only
+    ## replace disjoint_common_ancestors with neighbours
     for dca in disjoint_common_ancestors:
 
         vectors = []
@@ -376,24 +390,37 @@ def getExplanations(path_graph, path_label_classes, path_embedding_classes, targ
         pred_without_dca = ml_model.predict(X_test_without_dca).tolist()[0]
         proba_pred_without_dca = ml_model.predict_proba(X_test_without_dca).tolist()[0]
 
+        ## replace binary with multiclass
         file_predictions.write(str(dca) + '\t' + 'True' + '\t' + str(pred_without_dca) + '\t' + str(
             proba_pred_without_dca[0]) + '\t' + str(proba_pred_without_dca[1]) + '\n')
 
+        ## only save results where prediction is changed with necessary
+        ## replace with threshold or save every explanation?
+        ## replace binary with multiclass
         if pred_original != pred_without_dca:
             necessary_explan.append(str(dca))
+            ## dic_labels_classes not needed for AIFB because meaning is explicit in node name
+            ## dic_labels_classes[str(dca)] -> str(dca) ?
             results_without.append(["w/o '" + dic_labels_classes[str(dca)] + "'", proba_pred_without_dca[1], proba_pred_without_dca[0]])
 
         X_test_only_dca = [dic_emb_classes[str(dca)]]
         pred_only_dca = ml_model.predict(X_test_only_dca).tolist()[0]
         proba_pred_only_dca = ml_model.predict_proba(X_test_only_dca).tolist()[0]
 
+        ## replace binary with multiclass
         file_predictions.write(str(dca) + '\t' + 'False' + '\t' + str(pred_only_dca) + '\t' + str(
             proba_pred_only_dca[0]) + '\t' + str(proba_pred_only_dca[1]) + '\n')
 
+        ## only save results where prediction is maintained with sufficient
+        ## replace with threshold or save every explanation?
+        ## replace binary with multiclass
         if pred_original == pred_only_dca:
             sufficient_explan.append(str(dca))
+            ## dic_labels_classes not needed for AIFB because meaning is explicit in node name
+            ## dic_labels_classes[str(dca)] -> str(dca) ?
             results_only.append(["only '" + dic_labels_classes[str(dca)] + "'", proba_pred_only_dca[1], proba_pred_only_dca[0]])
 
+    ## obtain the prediction for all the sufficient dcas
     vectors_withsufficient = []
     for suf in sufficient_explan:
         vectors_withsufficient.append(dic_emb_classes[suf])
@@ -406,6 +433,7 @@ def getExplanations(path_graph, path_label_classes, path_embedding_classes, targ
     predicted_label_withsufficient = ml_model.predict(x_withsufficient.reshape(1, -1))[0]
     proba_withsufficient = ml_model.predict_proba(x_withsufficient.reshape(1, -1))[0]
 
+    ## obtain the prediction for all the necessary dcas
     vectors_withoutnecessary = []
     for not_nec in disjoint_common_ancestors:
         if str(not_nec) not in necessary_explan:
@@ -449,11 +477,11 @@ if __name__== '__main__':
     ####################################### PPI prediction
 
     path_file_representation = "./PPI/Embeddings/Emb_pair_maxdepth4_nwalks100_Avg_disjointcommonancestor.txt"
-    path_file_model = "./PPI/Models/RF/Model_RF.pickle
+    path_file_model = "./PPI/Models/RF/Model_RF.pickle"
     alg = "RF"
     path_graph = "./PPI/KG.gpickle"
     path_label_classes = "PPI/Labelclasses.pkl"
     path_explanations = "./PPI/Explanations/"
     path_embedding_classes = "PPI/Embeddings/Emb_classes_maxdepth4_nwalks100_disjointcommonancestor.txt"
     target_pair = ('P25398','P46783')
-    getExplanations(ontology_file_path, annotations_file_path, path_embedding_classes, target_pair, alg, path_file_model, path_explanations)
+    getExplanations(path_graph, path_label_classes, path_embedding_classes, target_pair, alg, path_file_model, path_explanations)
