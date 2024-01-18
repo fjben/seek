@@ -1,0 +1,12 @@
+{
+    "entities_name": "person",
+    "labels_name": "label_affiliation",
+    "target_predicate": "http://swrc.ontoware.org/ontology#affiliation",
+    "skip_predicates":
+    [
+        "http://swrc.ontoware.org/ontology#affiliation",
+        "http://swrc.ontoware.org/ontology#employs",
+        "http://swrc.ontoware.org/ontology#carriedOutBy"
+    ],
+    "rdf_file": "aifb_fixed_complete_stripped.n3"
+}
