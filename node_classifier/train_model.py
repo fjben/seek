@@ -34,28 +34,27 @@ sys.path.append(os.path.realpath(os.path.join(os.path.abspath(__file__), os.path
 from utils.logger import Logger
 # from run_seek_explanations import _rdflib_to_networkx_graph
 
+# os.environ['PYTHONHASHSEED'] = str(123)
+# os.execv(sys.executable, ['python3'] + sys.argv)
+
 
 ############################################################################### arguments
 
 # dataset = 'AIFB'
-dataset = 'MUTAG'
+# dataset = 'MUTAG'
 # dataset = 'AM_FROM_DGL'
 # dataset = 'MOVIE_DATASET'
 
 # aproximate_model=True
-# # aproximate_model=False
+# aproximate_model=False
 
-# best_embeddings_params = True
-best_embeddings_params = False
+best_embeddings_params = True
+# best_embeddings_params = False
+
+embeddings_for_all_entities = True
+# embeddings_for_all_entities = False
 
 verbose = 1
-
-parser = argparse.ArgumentParser(description="description")
-parser.add_argument("--aproximate_model",
-                    action="store_true",
-                    help="To use the aggregate representation model.")
-args = parser.parse_args()
-aproximate_model = args.aproximate_model
 
 
 ############################################################################### logging
@@ -78,14 +77,14 @@ def create_save_dirs(model_path, dataset, model_type, current_model_num):
 
 ## this could alternatively be accomplished using the pyRDF2Vec kg object with the get_neighbors method, one advantage
 ## is that it only needs to load the graph once for the kg object
-def find_neighbours(graph, entities):
-        
+def find_neighbours(graph, entities):        
     # Print the number of "triples" in the Graph
     print(f"Graph graph has {len(graph)} statements.")
     # Prints: Graph g has 86 statements.
     all_neighbours = []
     entity_to_neighbours = OrderedDict()
     for entity in entities:
+        # kg._get_hops(Vertex(str(entity)))
         entity = rdflib.term.URIRef(entity)
         ## this only lists outgoing entities, not ingoing, but I think it's okay because when generating walks only
         ## outgoing entities are used
@@ -108,6 +107,26 @@ def find_neighbours(graph, entities):
     return all_neighbours, entity_to_neighbours
 
 
+def get_all_entities(graph):
+    # all_entities = [entity for entity in graph.subjects(unique=True) if not isinstance(entity, (rdflib.Literal, rdflib.BNode))]
+    all_subjects = {str(entity) for entity in graph.subjects(unique=True) if not isinstance(entity, (rdflib.Literal, rdflib.BNode))}
+    all_objects = {str(entity) for entity in graph.objects(unique=True) if not isinstance(entity, (rdflib.Literal, rdflib.BNode))}
+    all_entities = all_subjects.union(all_objects)
+    print(len(all_entities))
+
+    return list(all_entities)
+
+
+def stats_for_preds(predictions_proba):
+        maxs_list = [np.ndarray.max(single_pred) for single_pred in predictions_proba]
+        # for single_pred in predictions_proba:
+        #     print(numpy.ndarray.max(single_pred))
+        mean_preds = np.mean(maxs_list)
+        std_preds = np.std(maxs_list)
+
+        return mean_preds, std_preds
+
+
 def transformer_fit_transform_with_times(kg, entities):
     tic = time.time()
     walks = transformer.get_walks(kg, entities)
@@ -122,17 +141,19 @@ def transformer_fit_transform_with_times(kg, entities):
     return embeddings, walks_time, embeddings_fit_time
 
 
-def stats_for_preds(predictions_proba):
-        maxs_list = [np.ndarray.max(single_pred) for single_pred in predictions_proba]
-        # for single_pred in predictions_proba:
-        #     print(numpy.ndarray.max(single_pred))
-        mean_preds = np.mean(maxs_list)
-        std_preds = np.std(maxs_list)
-
-        return mean_preds, std_preds
-
-
 ############################################################################### script
+
+parser = argparse.ArgumentParser(description="description")
+parser.add_argument("--dataset",
+                    type=str,
+                    choices=['AIFB', 'MUTAG', 'AM_FROM_DGL', 'MDGENRE'],
+                    help="The dataset to use: FB15k, FB15k-237, WN18, WN18RR or YAGO3-10")
+parser.add_argument("--aproximate_model",
+                    action="store_true",
+                    help="To use the aggregate representation model.")
+args = parser.parse_args()
+dataset = args.dataset
+aproximate_model = args.aproximate_model
 
 cpu_num = cpu_count()
 
@@ -206,12 +227,12 @@ try:
     if workers != 1:
         warnings.warn('workers parameter is not equal to 1, so the results are not reproducible')
 except:
-    warnings.warn('no reproducibility parameters available, so the results are not reproducible, ')
-    RANDOM_STATE = random.randrange(0, 4294967295)
-    workers = cpu_num
+    warnings.warn('no reproducibility parameters available, so the results are not reproducible')
+    # RANDOM_STATE = random.randrange(0, 4294967295)
+    # workers = cpu_num
     # # for debugging purposes
-    # RANDOM_STATE = 22
-    # workers = 1
+    RANDOM_STATE = 22
+    workers = 1
 
 shutil.move('node_classifier/tmp/train_embeddings.log', os.path.join(current_model_models_results_path, 'train_embeddings.log'))
 
@@ -269,13 +290,15 @@ if best_embeddings_params:
             max_depth=2
             max_walks=500
 
-graph = rdflib.Graph().parse(location)
-
 # Defines the KG with the predicates to be skipped.
+tic = time.perf_counter()
 kg = KG(
     location = location,
     skip_predicates=skip_predicates,
 )
+toc = time.perf_counter()
+kg_init_time = toc - tic
+print(f"KG initialization time ({kg_init_time:0.4f}s)")
 
 transformer = RDF2VecTransformer(
     # Ensure random determinism for Word2Vec.
@@ -288,27 +311,57 @@ transformer = RDF2VecTransformer(
     verbose=verbose,
 )
 
+tic = time.perf_counter()
+graph = rdflib.Graph().parse(location)
+toc = time.perf_counter()
+print(f"Graph parse time ({toc - tic:0.4f}s)")
+all_entities = get_all_entities(graph)
+
+if embeddings_for_all_entities:
+    all_embeddings, walks_time, embeddings_fit_time = transformer_fit_transform_with_times(kg, all_entities)
+
+    dic_emb_classes = dict()
+    for entity, embeddings in zip(all_entities, all_embeddings):
+        dic_emb_classes[entity] = embeddings.tolist()
+
 if aproximate_model:
     all_neighbours, entity_to_neighbours = find_neighbours(graph, entities)
 
-    neighbours_embeddings, walks_time, embeddings_fit_time = transformer_fit_transform_with_times(kg, all_neighbours)
+    if not embeddings_for_all_entities:
+        ## uses transformer object
+        print('here')
+        neighbours_embeddings, walks_time, embeddings_fit_time = transformer_fit_transform_with_times(kg, all_neighbours)
+
+        dic_emb_classes = dict()
+        for neighbour, neighbour_embeddings in zip(all_neighbours, neighbours_embeddings):
+            dic_emb_classes[neighbour] = neighbour_embeddings.tolist()
+
+        all_embeddings = neighbours_embeddings
 
     embeddings = []
     for key, (entity, neighbours) in enumerate(entity_to_neighbours.items()):
         entity_neighbours_embeddings = []
         for neighbour in neighbours:
             idx = transformer._entities.index(neighbour)
-            entity_neighbours_embeddings.append(neighbours_embeddings[idx])
+            # entity_neighbours_embeddings.append(neighbours_embeddings[idx])
+            entity_neighbours_embeddings.append(all_embeddings[idx])
         entity_neighbours_embeddings = np.array(entity_neighbours_embeddings)
         entity_neighbours_embeddings_avg = np.average(entity_neighbours_embeddings, 0)
         embeddings.append(entity_neighbours_embeddings_avg.tolist())
 
-    dic_emb_classes = dict()
-    for neighbour, neighbour_embeddings in zip(all_neighbours, neighbours_embeddings):
-        dic_emb_classes[neighbour] = neighbour_embeddings.tolist()
-else:
-    embeddings, walks_time, embeddings_fit_time = transformer_fit_transform_with_times(kg, entities)
 
+else:
+    if not embeddings_for_all_entities:
+        ## uses transformer object
+        entities_embeddings, walks_time, embeddings_fit_time = transformer_fit_transform_with_times(kg, entities)
+
+        all_embeddings = entities_embeddings
+
+    embeddings = []
+    for entity in entities:
+        idx = transformer._entities.index(entity)
+        embeddings.append(all_embeddings[idx])
+    
 train_embeddings = embeddings[: len(train_entities)]
 test_embeddings = embeddings[len(train_entities) :]
 
@@ -334,7 +387,6 @@ clf = GridSearchCV(
 tic = time.perf_counter()
 clf.fit(train_embeddings, train_labels)
 toc = time.perf_counter()
-
 classifier_fit_time = toc - tic
 print(f"Fitted classifier model in ({classifier_fit_time:0.4f}s)\n")
 
@@ -346,9 +398,9 @@ acc_scr = accuracy_score(test_labels, predictions)
 f1_scr_wei = f1_score(test_labels, predictions, average='weighted')
 prec_scr_wei = precision_score(test_labels, predictions, average='weighted')
 reca_scr_wei = precision_score(test_labels, predictions, average='weighted')
-f1_scr_macro = f1_score(test_labels, predictions, average='weighted')
-prec_scr_macro = precision_score(test_labels, predictions, average='weighted')
-reca_scr_macro = precision_score(test_labels, predictions, average='weighted')
+f1_scr_macro = f1_score(test_labels, predictions, average='macro')
+prec_scr_macro = precision_score(test_labels, predictions, average='macro')
+reca_scr_macro = precision_score(test_labels, predictions, average='macro')
 
 print(
     f"Predicted {len(test_entities)} entities with\n"
@@ -368,9 +420,10 @@ print("Mean in probability of predicted class:\t\t\t", mean_preds)
 print("Standard deviation in probability of predicted class:\t", std_preds)
 
 results_summary = {
-    'classifier_fit_time': classifier_fit_time,
+    'kg_init_time': kg_init_time,
     'walks_time': walks_time,
     'embeddings_fit_time': embeddings_fit_time,
+    'classifier_fit_time': classifier_fit_time,
     'acc_scr': acc_scr,
     'f1_scr_wei': f1_scr_wei,
     'prec_scr_wei': prec_scr_wei,
