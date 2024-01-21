@@ -1,0 +1,6 @@
+### Jetbrains IDE
+__pycache__/
+
+stored_models
+node_classifier/data
+node_classifier/model

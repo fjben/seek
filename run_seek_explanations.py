@@ -1,3 +1,4 @@
+import json
 import random
 import os
 import sys
@@ -8,6 +9,7 @@ import copy
 import gc
 import pandas as pd
 
+import joblib
 import rdflib
 from rdflib.namespace import RDF, OWL, RDFS
 
@@ -173,7 +175,9 @@ def process_dataset(path_dataset_file):
     return list_labels
 
 
-def bar_plot(df, df_without, df_only, n_ancestors, output):
+def bar_plot(df, df_without, df_only, n_ancestors, prob_class, num_classes, output):
+    baseline = 1/num_classes
+
     cm = 1 / 2.54
     fig, ax = plt.subplots()
     #plt.figure(figsize=((1 * n_ancestors + 1.5) * cm, 9 * cm))
@@ -181,7 +185,7 @@ def bar_plot(df, df_without, df_only, n_ancestors, output):
     #plt.figure(figsize=(5, n_ancestors*2+3))
     sns.set_color_codes("pastel")
 
-    df_without['value'] = [x-0.5 if x>0.5 else -(1-x)+0.5 for x in df_without['prob class 1']]
+    df_without['value'] = [x-baseline if x>baseline else -(1-x)+baseline for x in df_without[prob_class]]
     list_colors_without=[]
     for x in df_without['value']:
         if x < 0:
@@ -193,7 +197,7 @@ def bar_plot(df, df_without, df_only, n_ancestors, output):
         list_colors_without.append(z)
     df_without['colors'] = list_colors_without
 
-    df_only['value'] = [float(x)-0.5 if x > 0.5 else -(1-x)+0.5 for x in df_only['prob class 1']]
+    df_only['value'] = [float(x)-baseline if x > baseline else -(1-x)+baseline for x in df_only[prob_class]]
     list_colors_only = []
     for x in df_only['value']:
         if x < 0:
@@ -205,27 +209,27 @@ def bar_plot(df, df_without, df_only, n_ancestors, output):
         list_colors_only.append(z)
     df_only['colors'] = list_colors_only
 
-    df['value'] = [float(x)-0.5 if x > 0.5 else -(1-x)+0.5 for x in df['prob class 1']]
+    df['value'] = [float(x)-baseline if x > baseline else -(1-x)+baseline for x in df[prob_class]]
     df['colors'] = ['#FF5050' if x < 0 else '#70BB83' for x in df['value']]
 
-    ax.hlines(y=df.dca, xmin=0, xmax=df.value, color=df['colors'], alpha=0.8, linewidth=2.5)
-    for x, y, tex in zip(df.value, df.dca, df.value):
+    ax.hlines(y=df.neighbour, xmin=0, xmax=df.value, color=df['colors'], alpha=0.8, linewidth=2.5)
+    for x, y, tex in zip(df.value, df.neighbour, df.value):
         if len(y) > 2:
-            t = ax.text(x, y, round(abs(tex) + 0.5, 2), horizontalalignment='right' if x < 0 else 'left',
+            t = ax.text(x, y, round(abs(tex) + baseline, 2), horizontalalignment='right' if x < 0 else 'left',
                         verticalalignment='center',
                         fontdict={'color': '#FF5050' if x < 0 else '#70BB83', 'size': 9})
 
-    ax.hlines(y=df_without.dca, xmin=0, xmax=df_without.value, color=df_without['colors'], alpha=0.8, linewidth=2.5)
-    for x, y, tex in zip(df_without.value, df_without.dca, df_without.value):
+    ax.hlines(y=df_without.neighbour, xmin=0, xmax=df_without.value, color=df_without['colors'], alpha=0.8, linewidth=2.5)
+    for x, y, tex in zip(df_without.value, df_without.neighbour, df_without.value):
         if len(y)>2:
-            t = ax.text(x, y, round(abs(tex) + 0.5, 2), horizontalalignment='right' if x < 0 else 'left',
+            t = ax.text(x, y, round(abs(tex) + baseline, 2), horizontalalignment='right' if x < 0 else 'left',
                         verticalalignment='center',
                         fontdict={'color': '#FF5050' if x < 0 else '#70BB83', 'size': 9})
 
-    ax.hlines(y=df_only.dca, xmin=0, xmax=df_only.value, color=df_only['colors'], alpha=0.8, linewidth=2.5)
-    for x, y, tex in zip(df_only.value, df_only.dca, df_only.value):
+    ax.hlines(y=df_only.neighbour, xmin=0, xmax=df_only.value, color=df_only['colors'], alpha=0.8, linewidth=2.5)
+    for x, y, tex in zip(df_only.value, df_only.neighbour, df_only.value):
         if len(y)>2:
-            t = ax.text(x, y, round(abs(tex) + 0.5, 2), horizontalalignment='right' if x < 0 else 'left',
+            t = ax.text(x, y, round(abs(tex) + baseline, 2), horizontalalignment='right' if x < 0 else 'left',
                         verticalalignment='center',
                         fontdict={'color': '#FF5050' if x < 0 else '#70BB83', 'size': 9})
 
@@ -302,57 +306,83 @@ def run_save_graph(ontology_file_path, annotations_file_path, path_graph, path_l
 
 
 
-def getExplanations(path_graph, path_label_classes, path_embedding_classes, target_pair, alg, path_file_model, path_explanations, n_embeddings=100, type='PPI'):
+def getExplanations(path_graph, path_label_classes, path_embedding_classes, entity_to_neighbours_path, target_entity, alg, path_file_model, path_explanations, n_embeddings=100, type='PPI'):
 
     # g, dic_labels_classes = construct_kg(ontology_file_path, annotations_file_path, type)
     # G = nx.DiGraph()
     # _rdflib_to_networkx_graph(g, G, calc_weights=False, edge_attrs=lambda s, p, o: {})
-    G = nx.read_gpickle(path_graph) ## read KG
+    # G = nx.read_gpickle(path_graph) ## read KG, not needed, loading nwighbours directly
     ## read dictionary for go terms
     ## not needed for AIFB because meaning is explicit in node name
-    with open(path_label_classes, 'rb') as label_classes:
-        dic_labels_classes = pickle.load(label_classes)
+    # with open(path_label_classes, 'rb') as label_classes:
+    #     dic_labels_classes = pickle.load(label_classes)
 
     ## embeddings for each go term
     ## replace with embeddings for each neighbour (set of neighbours found for all labelled nodes)
-    dic_emb_classes = eval(open(path_embedding_classes, 'r').read())
+    # dic_emb_classes = eval(open(path_embedding_classes, 'r').read())
+    with open(path_embedding_classes, 'r') as f:
+        dic_emb_classes = json.load(f)
 
-    ml_model = pickle.load(open(path_file_model + alg + "/Model_" + alg + ".pickle", "rb")) ## read ML model
+    ## read ML model
+    # ml_model = pickle.load(open(path_file_model + alg + "/Model_" + alg + ".pickle", "rb"))
+    ml_model = joblib.load(path_file_model)
+    num_classes = len(ml_model.classes_)
 
-    ent1, ent2 = target_pair ## unpack entities in entity pair, replace with target_entity to explain
+    ## unpack entities in entity pair, replace with target_entity to explain
+    # ent1, ent2 = target_pair
 
     start = time.time()
 
-    ensure_dir(path_explanations + alg + "/")
-    file_predictions = open(path_explanations + alg + "/" + ent1 + "-" + ent2 + ".txt", 'w') ## replace ent1-ent2 with ent
+    ensure_dir(path_explanations + "/")
+    file_predictions = open(path_explanations + "/" + target_entity.split('/')[-1] + ".txt", 'w') ## replace ent1-ent2 with ent
     ## replace DCA with Neighbour, replace binary with multiclass
-    file_predictions.write('DCA\tRemoving\tPredicted-label\tProb-class0\tProb-class1\n')
+    # file_predictions.write('DCA\tRemoving\tPredicted-label\tProb-class0\tProb-class1\n')
+    file_predictions.write('Neighbour\tRemoving\tPredicted-label')
+    for i in range(num_classes):
+        file_predictions.write(f'\tProb-class{i}')
+    file_predictions.write('\n')
+
 
     ## extract all common ancestors
     ## replace with all_neighbours
-    all_common_ancestors = list(nx.descendants(G, rdflib.term.URIRef(ent1)) & nx.descendants(G, rdflib.term.URIRef(ent2)))
-    ## ignore, no need to find disjoint_common_ancestors for entity to explain
-    disjoint_common_ancestors, parents = [], {}
-    for anc in all_common_ancestors:
-        parents[anc] = list(nx.descendants(G, anc))
-    for ancestor in all_common_ancestors:
-        parent = False
-        for anc2 in all_common_ancestors:
-            if anc2 != ancestor:
-                if ancestor in parents[anc2]:
-                    parent = True
-        if parent == False:
-            if str(ancestor) in dic_emb_classes:
-                disjoint_common_ancestors.append(ancestor)
+    # all_common_ancestors = list(nx.descendants(G, rdflib.term.URIRef(ent1)) & nx.descendants(G, rdflib.term.URIRef(ent2)))
+    # ## ignore, no need to find disjoint_common_ancestors for entity to explain
+    # disjoint_common_ancestors, parents = [], {}
+    # for anc in all_common_ancestors:
+    #     parents[anc] = list(nx.descendants(G, anc))
+    # for ancestor in all_common_ancestors:
+    #     parent = False
+    #     for anc2 in all_common_ancestors:
+    #         if anc2 != ancestor:
+    #             if ancestor in parents[anc2]:
+    #                 parent = True
+    #     if parent == False:
+    #         if str(ancestor) in dic_emb_classes:
+    #             disjoint_common_ancestors.append(ancestor)
+    with open(entity_to_neighbours_path, 'r') as f:
+        entity_to_neighbours = json.load(f)
+    # print(entity_to_neighbours)
+    all_neighbours = entity_to_neighbours[target_entity]
 
     necessary_explan, sufficient_explan = [], []
     results, results_without, results_only = [], [], []
 
     ## get all dcas embeddings and obtain the average
+    # all_vectors = []
+    # for dca in disjoint_common_ancestors:
+    #     ## embeddings of the dcas, replace with embeddings of the neighbours
+    #     all_vectors.append(dic_emb_classes[str(dca)])
+    # if len(all_vectors) == 0:
+    #     all_avg_vectors = np.array([0 for i in range(n_embeddings)])
+    # elif len(all_vectors) == 1:
+    #     all_avg_vectors = np.array(all_vectors[0])
+    # else:
+    #     all_array_vectors = np.array(all_vectors)
+    #     all_avg_vectors = np.average(all_array_vectors, 0)
     all_vectors = []
-    for dca in disjoint_common_ancestors:
+    for neighbour in all_neighbours:
         ## embeddings of the dcas, replace with embeddings of the neighbours
-        all_vectors.append(dic_emb_classes[str(dca)])
+        all_vectors.append(dic_emb_classes[neighbour])
     if len(all_vectors) == 0:
         all_avg_vectors = np.array([0 for i in range(n_embeddings)])
     elif len(all_vectors) == 1:
@@ -363,19 +393,29 @@ def getExplanations(path_graph, path_label_classes, path_embedding_classes, targ
 
     ## obtain the prediction for the dcas embeddings average
     X_test_original = [all_avg_vectors.tolist()]
+
     pred_original = ml_model.predict(X_test_original).tolist()[0]
     proba_pred_original = ml_model.predict_proba(X_test_original).tolist()[0]
     ## replace binary with multiclass
-    file_predictions.write('All' + '\t' + 'NA' + '\t' + str(pred_original) + '\t' + str(proba_pred_original[0]) + '\t' + str(proba_pred_original[1]) + '\n')
+    file_predictions.write('All' + '\t' + 'NA' + '\t' + str(pred_original))
+    for i in range(num_classes):
+        file_predictions.write('\t' + str(proba_pred_original[i]))
+    file_predictions.write('\n')
+
+    print(proba_pred_original)
 
     ## for each dca, obtain the prediction for all dcas except the dca and obtain the prediction for the dca only
     ## replace disjoint_common_ancestors with neighbours
-    for dca in disjoint_common_ancestors:
+    # for dca in disjoint_common_ancestors:
+    for neighbour in all_neighbours:
 
         vectors = []
-        for dca2 in disjoint_common_ancestors:
-            if dca2 != dca:
-                vectors.append(dic_emb_classes[str(dca2)])
+        # for dca2 in disjoint_common_ancestors:
+        for neighbour2 in all_neighbours:
+            # if dca2 != dca:
+            if neighbour2 != neighbour:
+                # vectors.append(dic_emb_classes[str(dca2)])
+                vectors.append(dic_emb_classes[neighbour2])
 
         if len(vectors) == 0:
             avg_vectors = np.array([0 for i in range(n_embeddings)])
@@ -391,34 +431,44 @@ def getExplanations(path_graph, path_label_classes, path_embedding_classes, targ
         proba_pred_without_dca = ml_model.predict_proba(X_test_without_dca).tolist()[0]
 
         ## replace binary with multiclass
-        file_predictions.write(str(dca) + '\t' + 'True' + '\t' + str(pred_without_dca) + '\t' + str(
-            proba_pred_without_dca[0]) + '\t' + str(proba_pred_without_dca[1]) + '\n')
+        file_predictions.write(neighbour + '\t' + 'True' + '\t' + str(pred_without_dca))
+        for i in range(num_classes):
+            file_predictions.write('\t' + str(proba_pred_without_dca[i]))
+        file_predictions.write('\n')
 
         ## only save results where prediction is changed with necessary
         ## replace with threshold or save every explanation?
         ## replace binary with multiclass
         if pred_original != pred_without_dca:
-            necessary_explan.append(str(dca))
+            necessary_explan.append(neighbour)
             ## dic_labels_classes not needed for AIFB because meaning is explicit in node name
             ## dic_labels_classes[str(dca)] -> str(dca) ?
-            results_without.append(["w/o '" + dic_labels_classes[str(dca)] + "'", proba_pred_without_dca[1], proba_pred_without_dca[0]])
+            results_list = ["w/o '" + neighbour + "'"]
+            for i in reversed(range(num_classes)):
+                results_list.append(str(proba_pred_without_dca[i]))
+            results_without.append(results_list)
 
-        X_test_only_dca = [dic_emb_classes[str(dca)]]
+        X_test_only_dca = [dic_emb_classes[neighbour]]
         pred_only_dca = ml_model.predict(X_test_only_dca).tolist()[0]
         proba_pred_only_dca = ml_model.predict_proba(X_test_only_dca).tolist()[0]
 
         ## replace binary with multiclass
-        file_predictions.write(str(dca) + '\t' + 'False' + '\t' + str(pred_only_dca) + '\t' + str(
-            proba_pred_only_dca[0]) + '\t' + str(proba_pred_only_dca[1]) + '\n')
+        file_predictions.write(neighbour + '\t' + 'False' + '\t' + str(pred_only_dca))
+        for i in range(num_classes):
+            file_predictions.write('\t' + str(proba_pred_only_dca[i]))
+        file_predictions.write('\n')
 
         ## only save results where prediction is maintained with sufficient
         ## replace with threshold or save every explanation?
         ## replace binary with multiclass
         if pred_original == pred_only_dca:
-            sufficient_explan.append(str(dca))
+            sufficient_explan.append(neighbour)
             ## dic_labels_classes not needed for AIFB because meaning is explicit in node name
             ## dic_labels_classes[str(dca)] -> str(dca) ?
-            results_only.append(["only '" + dic_labels_classes[str(dca)] + "'", proba_pred_only_dca[1], proba_pred_only_dca[0]])
+            results_list = ["only '" + neighbour + "'"]
+            for i in reversed(range(num_classes)):
+                results_list.append(proba_pred_only_dca[i])
+            results_only.append(results_list)
 
     ## obtain the prediction for all the sufficient dcas
     vectors_withsufficient = []
@@ -435,10 +485,10 @@ def getExplanations(path_graph, path_label_classes, path_embedding_classes, targ
 
     ## obtain the prediction for all the necessary dcas
     vectors_withoutnecessary = []
-    for not_nec in disjoint_common_ancestors:
-        if str(not_nec) not in necessary_explan:
-            vectors_withoutnecessary.append(dic_emb_classes[str(not_nec)])
-    if len(necessary_explan) == len(disjoint_common_ancestors):
+    for not_nec in all_neighbours:
+        if not_nec not in necessary_explan:
+            vectors_withoutnecessary.append(dic_emb_classes[not_nec])
+    if len(necessary_explan) == len(all_neighbours):
         x_withoutnecessary = np.array([0 for j in range(n_embeddings)])
     elif len(vectors_withoutnecessary) == 1:
         x_withoutnecessary = np.array(vectors_withoutnecessary[0])
@@ -452,38 +502,114 @@ def getExplanations(path_graph, path_label_classes, path_embedding_classes, targ
     end = time.time()
     print(end - start)
 
-    results_without.sort(key=itemgetter(2))
-    results_only.sort(key=itemgetter(2))
+    # print(results_only, '\n\n')
 
-    results_without.append(['  ', 0.5, 0.5])
+    # results_without.sort(key=itemgetter(2))
+    # results_only.sort(key=itemgetter(2))
+    idx_pred_original = ml_model.classes_.tolist().index(pred_original)
+    results_without.sort(key=itemgetter(idx_pred_original+1))
+    results_only.sort(key=itemgetter(idx_pred_original+1))
 
-    results.append(['global', proba_pred_original[1], proba_pred_original[0]])
-    results.append(['w/o necessary', proba_withoutnecessary[1], proba_withoutnecessary[0]])
-    results.append(['only sufficient', proba_withsufficient[1], proba_withsufficient[0]])
-    results.append([' ', 0.5, 0.5])
+    # print(results_only)
 
-    df_without = pd.DataFrame(results_without, columns=["dca", "prob class 1", "prob class 0"])
-    df_only = pd.DataFrame(results_only, columns=["dca", "prob class 1", "prob class 0"])
-    df = pd.DataFrame(results, columns=["dca", "prob class 1", "prob class 0"])
-    cols_only = ['#FF5050' if x[1] < 0.5 else '#70BB83' for x in results_only]
-    cols_without = ['#FF5050' if x[1] < 0.5 else '#70BB83' for x in results_without]
-    cols = ['#FF5050' if x[1] < 0.5 else '#70BB83' for x in results]
+    # results_without.append(['  ', 0.5, 0.5]) ## replace with multiclass
+    results_list = ['  ']
+    for i in range(num_classes):
+        results_list.append(1/num_classes)
+    results_without.append(results_list)
 
-    bar_plot(df, df_without, df_only, len(disjoint_common_ancestors), path_explanations + alg + "/Plot_" + ent1 + "-" + ent2 + ".png")
+    # results.append(['global', proba_pred_original[1], proba_pred_original[0]])
+    # results.append(['w/o necessary', proba_withoutnecessary[1], proba_withoutnecessary[0]])
+    # results.append(['only sufficient', proba_withsufficient[1], proba_withsufficient[0]])
+    # results.append([' ', 0.5, 0.5])
+    proba_pred_original_list = [proba_pred_original[i] for i in reversed(range(num_classes))]
+    proba_withoutnecessary_list = [proba_withoutnecessary[i] for i in reversed(range(num_classes))]
+    proba_withsufficient_list = [proba_withsufficient[i] for i in reversed(range(num_classes))]
+    proba_pred_original_list.insert(0, 'global')
+    proba_withoutnecessary_list.insert(0, 'w/o necessary')
+    proba_withsufficient_list.insert(0, 'only sufficient')
+    results.append(proba_pred_original_list)
+    results.append(proba_withoutnecessary_list)
+    results.append(proba_withsufficient_list)
+    results_list = [' ']
+    for i in range(num_classes):
+        results_list.append(1/num_classes)
+    results.append(results_list)
+
+    # df_without = pd.DataFrame(results_without, columns=["dca", "prob class 1", "prob class 0"])
+    # df_only = pd.DataFrame(results_only, columns=["dca", "prob class 1", "prob class 0"])
+    # df = pd.DataFrame(results, columns=["dca", "prob class 1", "prob class 0"])
+    # cols_only = ['#FF5050' if x[1] < 0.5 else '#70BB83' for x in results_only]
+    # cols_without = ['#FF5050' if x[1] < 0.5 else '#70BB83' for x in results_without]
+    # cols = ['#FF5050' if x[1] < 0.5 else '#70BB83' for x in results]
+    columns = [f'prob class {i}' for i in reversed(range(num_classes))]
+    columns.insert(0, 'neighbour')
+    df_without = pd.DataFrame(results_without, columns=columns)
+    df_only = pd.DataFrame(results_only, columns=columns)
+    df = pd.DataFrame(results, columns=columns)
+    # cols_only = ['#FF5050' if x[1] < 0.5 else '#70BB83' for x in results_only]
+    # cols_without = ['#FF5050' if x[1] < 0.5 else '#70BB83' for x in results_without]
+    # cols = ['#FF5050' if x[1] < 0.5 else '#70BB83' for x in results]
+
+    print(df, '\n\n')
+    print(df_without, '\n\n')
+    print(df_only, '\n\n')
+    print(len(all_neighbours), '\n\n')
+
+
+    print(idx_pred_original)
+    prob_class = f'prob class {idx_pred_original}'
+    print(prob_class)
+    bar_plot(df, df_without, df_only, len(all_neighbours), prob_class, num_classes, path_explanations + "/Plot_" + target_entity.split('/')[-1] + ".png")
 
 
 if __name__== '__main__':
 
     ####################################### PPI prediction
 
-    path_file_representation = "./PPI/Embeddings/Emb_pair_maxdepth4_nwalks100_Avg_disjointcommonancestor.txt"
-    # path_file_model = "./PPI/Models/RF/Model_RF.pickle"
-    path_file_model = "./PPI/Models/"
-    alg = "RF"
-    # alg = "MLP"
-    path_graph = "./PPI/KG.gpickle"
-    path_label_classes = "PPI/Labelclasses.pkl"
-    path_explanations = "./PPI/Explanations/"
-    path_embedding_classes = "PPI/Embeddings/Emb_classes_maxdepth4_nwalks100_disjointcommonancestor.txt"
-    target_pair = ('P25398','P46783')
-    getExplanations(path_graph, path_label_classes, path_embedding_classes, target_pair, alg, path_file_model, path_explanations)
+    # path_file_representation = "./PPI/Embeddings/Emb_pair_maxdepth4_nwalks100_Avg_disjointcommonancestor.txt"
+    # # path_file_model = "./PPI/Models/RF/Model_RF.pickle"
+    # path_file_model = "./PPI/Models/"
+    # alg = "RF"
+    # # alg = "MLP"
+    # path_graph = "./PPI/KG.gpickle"
+    # path_label_classes = "PPI/Labelclasses.pkl"
+    # path_explanations = "./PPI/Explanations/"
+    # path_embedding_classes = "PPI/Embeddings/Emb_classes_maxdepth4_nwalks100_disjointcommonancestor.txt"
+    # target_pair = ('P25398','P46783')
+    # getExplanations(path_graph, path_label_classes, path_embedding_classes, target_pair, alg, path_file_model, path_explanations)
+
+    dataset = 'AIFB'
+
+    data_path = f'node_classifier/data/{dataset}'
+
+    model_path = f'node_classifier/model/{dataset}'
+
+    saved_models = os.listdir(model_path)
+    if not saved_models:
+        sys.exit('there are no saved models, directory is empty')
+
+    ## sorts the models first to last using the name ending digits
+    last_saved_model = saved_models.sort(key=lambda x: int(x.split('_')[-1]))
+    last_saved_model = saved_models[-1]
+    current_model_path = os.path.join(model_path, last_saved_model)
+
+    path_explanations = os.path.join(current_model_path, 'explanations')
+    if not os.path.exists(path_explanations):
+        os.mkdir(path_explanations)
+    else:
+        if os.listdir(path_explanations):
+            raise Exception('explanation already exists for the current model')
+
+    # path_file_representation = "./PPI/Embeddings/Emb_pair_maxdepth4_nwalks100_Avg_disjointcommonancestor.txt"
+    path_file_model = os.path.join(current_model_path, 'models/classifier_AIFB')
+    alg = None
+    path_graph = os.path.join(data_path, 'KG.gpickle')
+    path_label_classes = None
+    path_embedding_classes = os.path.join(current_model_path, 'trained/neighbours_embeddings.json')
+    entity_to_neighbours_path = os.path.join(current_model_path, 'trained/entity_to_neighbours.json')
+    # target_entity = 'http://www.aifb.uni-karlsruhe.de/Personen/viewPersonOWL/id1909instance'
+    # target_entity = 'http://www.aifb.uni-karlsruhe.de/Personen/viewPersonOWL/id2040instance'
+    # target_entity = 'http://www.aifb.uni-karlsruhe.de/Personen/viewPersonOWL/id2119instance'
+    target_entity = 'http://www.aifb.uni-karlsruhe.de/Personen/viewPersonOWL/id2121instance'
+    getExplanations(path_graph, path_label_classes, path_embedding_classes, entity_to_neighbours_path, target_entity, alg, path_file_model, path_explanations)

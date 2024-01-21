@@ -1,0 +1,8 @@
+Neighbour	Removing	Predicted-label	Prob-class0	Prob-class1	Prob-class2	Prob-class3
+All	NA	http://www.aifb.uni-karlsruhe.de/Forschungsgruppen/viewForschungsgruppeOWL/id3instance	0.105	0.28	0.415	0.2
+http://www.aifb.uni-karlsruhe.de/Projekte/viewProjektOWL/id41instance	True	http://www.aifb.uni-karlsruhe.de/Forschungsgruppen/viewForschungsgruppeOWL/id3instance	0.22	0.16	0.44	0.18
+http://www.aifb.uni-karlsruhe.de/Projekte/viewProjektOWL/id41instance	False	http://www.aifb.uni-karlsruhe.de/Forschungsgruppen/viewForschungsgruppeOWL/id3instance	0.12	0.24	0.48	0.16
+http://swrc.ontoware.org/ontology#Person	True	http://www.aifb.uni-karlsruhe.de/Forschungsgruppen/viewForschungsgruppeOWL/id3instance	0.105	0.27	0.445	0.18
+http://swrc.ontoware.org/ontology#Person	False	http://www.aifb.uni-karlsruhe.de/Forschungsgruppen/viewForschungsgruppeOWL/id3instance	0.23	0.16	0.42	0.19
+http://swrc.ontoware.org/ontology#PhDStudent	True	http://www.aifb.uni-karlsruhe.de/Forschungsgruppen/viewForschungsgruppeOWL/id3instance	0.115	0.27	0.405	0.21
+http://swrc.ontoware.org/ontology#PhDStudent	False	http://www.aifb.uni-karlsruhe.de/Forschungsgruppen/viewForschungsgruppeOWL/id3instance	0.2593877551020408	0.2404081632653061	0.390204081632653	0.11
