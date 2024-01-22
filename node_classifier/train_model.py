@@ -431,6 +431,8 @@ results_summary = {
     'f1_scr_macro': f1_scr_macro,
     'prec_scr_macro': prec_scr_macro,
     'reca_scr_macro': reca_scr_macro,
+    'mean_preds': mean_preds,
+    'std_preds': std_preds
 }
 
 
