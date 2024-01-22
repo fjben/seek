@@ -11,7 +11,7 @@ set -e
 # dataset='AIFB'
 # dataset='MUTAG'
 # dataset='AM_FROM_DGL'
-dataset='MOVIE_DATASET'
+dataset='MDGENRE'
 
 
 ############################################################################### script
