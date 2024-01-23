@@ -16,7 +16,7 @@ from rdflib.namespace import RDF, OWL, RDFS
 import networkx as nx
 
 from sklearn.model_selection import train_test_split
-from sklearn import metrics
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.utils.validation import check_array
@@ -565,14 +565,200 @@ def getExplanations(path_graph, path_label_classes, path_embedding_classes, enti
 
 
 def compute_performance_metrics(predicted_labels, list_labels):
-    waf = metrics.f1_score(list_labels, predicted_labels, average='weighted')
-    pr = metrics.precision_score(list_labels, predicted_labels, average='weighted')
-    re = metrics.recall_score(list_labels, predicted_labels, average='weighted')
+    waf = f1_score(list_labels, predicted_labels, average='weighted')
+    pr = precision_score(list_labels, predicted_labels, average='weighted')
+    re = recall_score(list_labels, predicted_labels, average='weighted')
     return waf, pr, re
 
+## get the wrapper method necessary (backward) and sufficient (forward) explanations
+def get_new_score(ml_model, X_test, predicted_class_original):
+    X_test = [X_test.tolist()]
+    pred = ml_model.predict(X_test).tolist()[0]
+    proba_pred = ml_model.predict_proba(X_test).tolist()[0]
+    pred_proba_predicted_class = proba_pred[predicted_class_original]
 
-def compute_effectiveness_kelpie(dataset_labels, path_graph, path_label_classes, path_embedding_classes,
-                                 entity_to_neighbours_path, path_file_model, model_stats_path, path_explanations,
+    return pred_proba_predicted_class
+
+
+def get_avg_vectors(vectors, n_embeddings):
+    if len(vectors) == 0:
+        avg_vectors = np.array([0 for i in range(n_embeddings)])
+    elif len(vectors) == 1:
+        avg_vectors = np.array(vectors[0])
+    else:
+        array_vectors = np.array(vectors)
+        avg_vectors = np.average(array_vectors, 0)
+
+    return avg_vectors
+
+
+def get_list_of_vectors_with_some_neighbours(dic_emb_classes, all_neighbours, some_neighbours, explan_type):
+    vectors = []
+    for neighbour in all_neighbours:
+        if explan_type == 'necessary':
+            if neighbour not in some_neighbours:
+                vectors.append(dic_emb_classes[neighbour])
+        elif explan_type == 'sufficient':
+            if neighbour in some_neighbours:
+                vectors.append(dic_emb_classes[neighbour])
+        else:
+            raise Exception('must have a explan_type of explanation')
+
+    return vectors
+
+
+def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original,
+                                                pred_proba_predicted_class_original, threshold, dic_emb_classes,
+                                                n_embeddings, all_neighbours, current_neighbours_in_explanation,
+                                                candidate_neighbours, explan_type):
+    
+    explanation_found = False
+    early_stop = False
+
+    candidate_neighbours_results = dict()
+    current_neighbours_in_explanation = list(current_neighbours_in_explanation)
+    candidate_neighbours = list(candidate_neighbours)
+    # print(type(candidate_neighbours))
+    # print('current_neighbours_in_explanation')
+    # print(current_neighbours_in_explanation)
+    for candidate_neighb in candidate_neighbours:
+        # print('candidate_neighb')
+        # print(type(candidate_neighb))
+        some_neighbours = current_neighbours_in_explanation + [candidate_neighb]
+        # print('some_neighbours')
+        # print(some_neighbours)
+        avg_vectors = get_list_of_vectors_with_some_neighbours(dic_emb_classes, all_neighbours,
+                                                                some_neighbours, explan_type=explan_type)
+        
+        X_test = get_avg_vectors(avg_vectors, n_embeddings)
+
+        pred_proba_predicted_class = get_new_score(ml_model, X_test, predicted_class_original)
+        # print('some_neighbours')
+        # print(some_neighbours)
+        candidate_neighbours_results[tuple(some_neighbours)] = pred_proba_predicted_class
+        if early_stop:
+            if explan_type == 'necessary':
+                if pred_proba_predicted_class_original - pred_proba_predicted_class >= threshold:
+                    explanation_found = True
+                    current_best_neighbours = set(min(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
+                    return explanation_found, current_best_neighbours, candidate_neighbours_results
+            elif explan_type == 'sufficient':
+                if pred_proba_predicted_class_original - pred_proba_predicted_class <= threshold:
+                    explanation_found = True
+                    current_best_neighbours = set(max(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
+                    # print('here')
+                    # print(pred_proba_predicted_class_original, pred_proba_predicted_class)
+                    return explanation_found, current_best_neighbours, candidate_neighbours_results
+            else:
+                raise Exception('must have a explan_type of explanation')
+
+    if explan_type == 'necessary':
+        current_best_neighbours = set(min(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
+        explanation_found = True if pred_proba_predicted_class_original - pred_proba_predicted_class >= threshold else False
+    elif explan_type == 'sufficient':
+        # print('candidate_neighbours_results')
+        # print(candidate_neighbours_results.items())
+        current_best_neighbours = set(max(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
+        explanation_found = True if pred_proba_predicted_class_original - pred_proba_predicted_class <= threshold else False
+    else:
+        raise Exception('must have a explan_type of explanation')
+
+    return explanation_found, current_best_neighbours, candidate_neighbours_results
+
+
+## necessary (backward)
+def wrapper_method_for_explanation_selection(
+        ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
+        n_embeddings, all_neighbours, max_len_explanations, explan_type):
+    
+    all_neigbours_set = set(all_neighbours)
+
+    wrapper_explan = dict()
+    
+    current_neighbours_in_explanation = set()
+    candidate_neighbours = set(all_neighbours)
+    # i = 0
+    while candidate_neighbours:
+        # print('here')
+        # print('current_neighbours_in_explanation')
+        # print(current_neighbours_in_explanation)
+
+        explanation_found, \
+        current_neighbours_in_explanation, \
+        current_explan = compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original,
+                                                    pred_proba_predicted_class_original, threshold, dic_emb_classes,
+                                                    n_embeddings, all_neighbours,
+                                                    current_neighbours_in_explanation, candidate_neighbours,
+                                                    explan_type=explan_type)
+        wrapper_explan.update(current_explan)
+        # print(len(list(current_explan.keys())[0]))
+        # print(list(current_explan.keys())[0])
+        if explanation_found or len(list(current_explan.keys())[0]) == max_len_explanations:
+            break
+
+        candidate_neighbours = all_neigbours_set.difference(current_neighbours_in_explanation)
+
+        # i += 1
+        # if i == 5:
+        #     raise
+
+    # print(explanation_found)
+
+    # print(pred_proba_predicted_class_original)
+    # print('necessary_explan')
+    # print(necessary_explan, '\n\n')
+    if explan_type == 'necessary':
+        # wrapper_explan_numbers = min(wrapper_explan.items(), key=lambda x: x[1])
+        wrapper_explan = list(min(wrapper_explan.items(), key=lambda x: x[1])[0])
+    elif explan_type == 'sufficient':
+        # wrapper_explan_numbers = max(wrapper_explan.items(), key=lambda x: x[1])
+        wrapper_explan = list(max(wrapper_explan.items(), key=lambda x: x[1])[0])
+    # print(necessary_explan)
+    # raise
+
+    return wrapper_explan # , wrapper_explan_numbers
+
+
+def compute_nec_suf_delta(met, test_labels, predictions, predictions_necessary, predictions_sufficient, average_type=''):
+    names = ['original', 'necessary', 'delta_necessary', 'sufficient', 'delta_sufficient']
+    keys_names = ['_'.join([name, met.__name__, average_type]) for name in names]
+    preds_list = [predictions, predictions_necessary, predictions_sufficient]
+    scores = []
+    for pred in preds_list:
+        if met == accuracy_score:
+            scores.append(met(test_labels, pred))
+        else:
+            scores.append(met(test_labels, pred, average=average_type))
+    delta_necessary = scores[1] - scores[0]
+    delta_sufficient = scores[2] - scores[0]
+    scores.insert(2, delta_necessary)
+    scores.append(delta_sufficient)
+    scores_dict = dict(zip(keys_names, scores))
+
+    return scores_dict
+
+def compute_performance_metrics_v2(test_labels, predictions, predictions_necessary, predictions_sufficient):
+    effectiveness_results = compute_nec_suf_delta(accuracy_score, test_labels, predictions, predictions_necessary, predictions_sufficient)
+
+    metrics_list = [f1_score, precision_score, recall_score]
+    average_type = ['weighted', 'macro']
+    for aver_type in average_type:
+        for met in metrics_list:
+            effectiveness_results.update(compute_nec_suf_delta(met, test_labels, predictions,
+                                                                predictions_necessary, predictions_sufficient, aver_type))
+
+
+    return effectiveness_results
+
+
+# def compute_effectiveness_kelpie(dataset_labels, path_graph, path_label_classes, path_embedding_classes,
+#                                  entity_to_neighbours_path, path_file_model, model_stats_path, path_explanations,
+#                                  max_len_explanations, n_embeddings=100):
+# def compute_effectiveness_kelpie(dataset_labels, path_embedding_classes,
+#                                  entity_to_neighbours_path, path_file_model, model_stats_path, path_explanations,
+#                                  max_len_explanations, n_embeddings=100):
+def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
+                                 entity_to_neighbours, ml_model, results_summary, path_explanations,
                                  max_len_explanations, n_embeddings=100):
     
     explanation_limit='threshold'
@@ -588,16 +774,17 @@ def compute_effectiveness_kelpie(dataset_labels, path_graph, path_label_classes,
     #     dic_labels_classes = pickle.load(label_classes)
 
     ## for loading std dev for threshold
-    with open(model_stats_path, 'r') as f:
-        results_summary = json.load(f)
+    # with open(model_stats_path, 'r') as f:
+    #     results_summary = json.load(f)
 
     threshold = results_summary['std_preds']
 
-    with open(path_embedding_classes, 'r') as f:
-        dic_emb_classes = json.load(f)
+    # with open(path_embedding_classes, 'r') as f:
+    #     dic_emb_classes = json.load(f)
 
     n_embeddings = len(list(dic_emb_classes.values())[0])
-    ml_model = joblib.load(path_file_model)
+
+    # ml_model = joblib.load(path_file_model)
 
     # for (entity, label) in dataset_labels[33:34]:
     # for (entity, label) in dataset_labels[0:1]:
@@ -618,9 +805,11 @@ def compute_effectiveness_kelpie(dataset_labels, path_graph, path_label_classes,
         #     if parent == False:
         #         if str(ancestor) in dic_emb_classes:
         #             disjoint_common_ancestors.append(ancestor)
-        with open(entity_to_neighbours_path, 'r') as f:
-            entity_to_neighbours = json.load(f)
+
+        # with open(entity_to_neighbours_path, 'r') as f:
+        #     entity_to_neighbours = json.load(f)
         # print(entity_to_neighbours)
+
         all_neighbours = entity_to_neighbours[entity]
 
         all_vectors = []
@@ -732,158 +921,6 @@ def compute_effectiveness_kelpie(dataset_labels, path_graph, path_label_classes,
             # pred_eva_sufficient.append(pred_withsufficient)
             # original_pred_eva_sufficient.append(pred_original)
             # y_eva_sufficient.append(label)
-        
-
-
-
-        ## get the wrapper method necessary (backward) and sufficient (forward) explanations
-        def get_new_score(ml_model, X_test, predicted_class_original):
-            X_test = [X_test.tolist()]
-            pred = ml_model.predict(X_test).tolist()[0]
-            proba_pred = ml_model.predict_proba(X_test).tolist()[0]
-            pred_proba_predicted_class = proba_pred[predicted_class_original]
-
-            return pred_proba_predicted_class
-        
-
-        def get_avg_vectors(vectors, n_embeddings):
-            if len(vectors) == 0:
-                avg_vectors = np.array([0 for i in range(n_embeddings)])
-            elif len(vectors) == 1:
-                avg_vectors = np.array(vectors[0])
-            else:
-                array_vectors = np.array(vectors)
-                avg_vectors = np.average(array_vectors, 0)
-
-            return avg_vectors
-
-
-        def get_list_of_vectors_with_some_neighbours(dic_emb_classes, all_neighbours, some_neighbours, explan_type):
-            vectors = []
-            for neighbour in all_neighbours:
-                if explan_type == 'necessary':
-                    if neighbour not in some_neighbours:
-                        vectors.append(dic_emb_classes[neighbour])
-                elif explan_type == 'sufficient':
-                    if neighbour in some_neighbours:
-                        vectors.append(dic_emb_classes[neighbour])
-                else:
-                    raise Exception('must have a explan_type of explanation')
-
-            return vectors
-        
-
-        def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original,
-                                                      pred_proba_predicted_class_original, threshold, dic_emb_classes,
-                                                      n_embeddings, all_neighbours, current_neighbours_in_explanation,
-                                                      candidate_neighbours, explan_type):
-            
-            explanation_found = False
-            early_stop = False
-
-            candidate_neighbours_results = dict()
-            current_neighbours_in_explanation = list(current_neighbours_in_explanation)
-            candidate_neighbours = list(candidate_neighbours)
-            # print(type(candidate_neighbours))
-            # print('current_neighbours_in_explanation')
-            # print(current_neighbours_in_explanation)
-            for candidate_neighb in candidate_neighbours:
-                # print('candidate_neighb')
-                # print(type(candidate_neighb))
-                some_neighbours = current_neighbours_in_explanation + [candidate_neighb]
-                # print('some_neighbours')
-                # print(some_neighbours)
-                avg_vectors = get_list_of_vectors_with_some_neighbours(dic_emb_classes, all_neighbours,
-                                                                       some_neighbours, explan_type=explan_type)
-                
-                X_test = get_avg_vectors(avg_vectors, n_embeddings)
-
-                pred_proba_predicted_class = get_new_score(ml_model, X_test, predicted_class_original)
-                # print('some_neighbours')
-                # print(some_neighbours)
-                candidate_neighbours_results[tuple(some_neighbours)] = pred_proba_predicted_class
-                if early_stop:
-                    if explan_type == 'necessary':
-                        if pred_proba_predicted_class_original - pred_proba_predicted_class >= threshold:
-                            explanation_found = True
-                            current_best_neighbours = set(min(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
-                            return explanation_found, current_best_neighbours, candidate_neighbours_results
-                    elif explan_type == 'sufficient':
-                        if pred_proba_predicted_class_original - pred_proba_predicted_class <= threshold:
-                            explanation_found = True
-                            current_best_neighbours = set(max(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
-                            # print('here')
-                            # print(pred_proba_predicted_class_original, pred_proba_predicted_class)
-                            return explanation_found, current_best_neighbours, candidate_neighbours_results
-                    else:
-                        raise Exception('must have a explan_type of explanation')
-
-            if explan_type == 'necessary':
-                current_best_neighbours = set(min(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
-                explanation_found = True if pred_proba_predicted_class_original - pred_proba_predicted_class >= threshold else False
-            elif explan_type == 'sufficient':
-                # print('candidate_neighbours_results')
-                # print(candidate_neighbours_results.items())
-                current_best_neighbours = set(max(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
-                explanation_found = True if pred_proba_predicted_class_original - pred_proba_predicted_class <= threshold else False
-            else:
-                raise Exception('must have a explan_type of explanation')
-
-            return explanation_found, current_best_neighbours, candidate_neighbours_results
-        
-
-        ## necessary (backward)
-        def wrapper_method_for_explanation_selection(
-                ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
-                n_embeddings, all_neighbours, max_len_explanations, explan_type):
-            
-            all_neigbours_set = set(all_neighbours)
-
-            wrapper_explan = dict()
-            
-            current_neighbours_in_explanation = set()
-            candidate_neighbours = set(all_neighbours)
-            # i = 0
-            while candidate_neighbours:
-                # print('here')
-                # print('current_neighbours_in_explanation')
-                # print(current_neighbours_in_explanation)
-
-                explanation_found, \
-                current_neighbours_in_explanation, \
-                current_explan = compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original,
-                                                            pred_proba_predicted_class_original, threshold, dic_emb_classes,
-                                                            n_embeddings, all_neighbours,
-                                                            current_neighbours_in_explanation, candidate_neighbours,
-                                                            explan_type=explan_type)
-                wrapper_explan.update(current_explan)
-                # print(len(list(current_explan.keys())[0]))
-                # print(list(current_explan.keys())[0])
-                if explanation_found or len(list(current_explan.keys())[0]) == max_len_explanations:
-                    break
-
-                candidate_neighbours = all_neigbours_set.difference(current_neighbours_in_explanation)
-
-                # i += 1
-                # if i == 5:
-                #     raise
-
-            # print(explanation_found)
-
-            # print(pred_proba_predicted_class_original)
-            # print('necessary_explan')
-            # print(necessary_explan, '\n\n')
-            if explan_type == 'necessary':
-                # wrapper_explan_numbers = min(wrapper_explan.items(), key=lambda x: x[1])
-                wrapper_explan = list(min(wrapper_explan.items(), key=lambda x: x[1])[0])
-            elif explan_type == 'sufficient':
-                # wrapper_explan_numbers = max(wrapper_explan.items(), key=lambda x: x[1])
-                wrapper_explan = list(max(wrapper_explan.items(), key=lambda x: x[1])[0])
-            # print(necessary_explan)
-            # raise
-
-            return wrapper_explan # , wrapper_explan_numbers
-
 
         necessary_explan = wrapper_method_for_explanation_selection(
             ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
@@ -960,6 +997,9 @@ def compute_effectiveness_kelpie(dataset_labels, path_graph, path_label_classes,
 
     # print(len(original_pred_eva_necessary), '\n')
     # print(len(y_eva_necessary))
+    
+    effectiveness_results = compute_performance_metrics_v2(y_eva_necessary, original_pred_eva_necessary,
+                                                           pred_eva_necessary, pred_eva_sufficient)
 
     original_waf_necc, original_pr_necc, original_re_necc = compute_performance_metrics(original_pred_eva_necessary,y_eva_necessary)
     waf_necc, pr_necc, re_necc = compute_performance_metrics(pred_eva_necessary, y_eva_necessary)
@@ -978,7 +1018,8 @@ def compute_effectiveness_kelpie(dataset_labels, path_graph, path_label_classes,
         file_output.write('Original\t' + str(original_waf_suf) + '\t' + str(original_pr_suf) + '\t' + str(original_re_suf) + '\n')
         file_output.write('Sufficient\t' + str(waf_suf) + '\t' + str(pr_suf) + '\t' + str(re_suf) + '\n')
         file_output.write('DeltaSufficient\t' + str(waf_suf - original_waf_suf) + '\t' + str(pr_suf - original_pr_suf) + '\t' + str(re_suf - original_re_suf) + '\n')
-
+    
+    return effectiveness_results
 
 if __name__== '__main__':
 
@@ -1054,13 +1095,27 @@ if __name__== '__main__':
             # raise Exception('there are no explanations to evaluate')
 
     # path_file_representation = "./PPI/Embeddings/Emb_pair_maxdepth4_nwalks100_Avg_disjointcommonancestor.txt"
+            
     path_file_model = os.path.join(current_model_path, f'models/classifier_{dataset}')
+    clf = joblib.load(path_file_model)
+
+
     alg = None
     path_graph = os.path.join(data_path, 'KG.gpickle')
     path_label_classes = None
+
     path_embedding_classes = os.path.join(current_model_path, 'trained/neighbours_embeddings.json')
+    with open(path_embedding_classes, 'r') as f:
+        dic_emb_classes = json.load(f)
+
     entity_to_neighbours_path = os.path.join(current_model_path, 'trained/entity_to_neighbours.json')
+    with open(entity_to_neighbours_path, 'r') as f:
+        entity_to_neighbours = json.load(f)
+
     model_stats_path = os.path.join(current_model_path, 'models_results/results_summary.json')
+    with open(model_stats_path, 'r') as f:
+        results_summary = json.load(f)
+
     # target_entity = 'http://www.aifb.uni-karlsruhe.de/Personen/viewPersonOWL/id1909instance'
     # target_entity = 'http://www.aifb.uni-karlsruhe.de/Personen/viewPersonOWL/id2040instance'
     # target_entity = 'http://www.aifb.uni-karlsruhe.de/Personen/viewPersonOWL/id2119instance'
@@ -1072,6 +1127,7 @@ if __name__== '__main__':
 
     dataset_labels = list(zip(test_entities, test_labels))
 
-    compute_effectiveness_kelpie(dataset_labels, path_graph, path_label_classes, path_embedding_classes,
-                                 entity_to_neighbours_path, path_file_model, model_stats_path, path_explanations,
-                                 max_len_explanations)
+    # compute_effectiveness_kelpie(dataset_labels, path_embedding_classes, entity_to_neighbours_path, path_file_model,
+    #                              model_stats_path, path_explanations, max_len_explanations)
+    compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf,
+                                 model_stats_path, path_explanations, max_len_explanations)

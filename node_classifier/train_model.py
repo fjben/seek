@@ -397,10 +397,10 @@ predictions_proba = clf.predict_proba(test_embeddings)
 acc_scr = accuracy_score(test_labels, predictions)
 f1_scr_wei = f1_score(test_labels, predictions, average='weighted')
 prec_scr_wei = precision_score(test_labels, predictions, average='weighted')
-reca_scr_wei = precision_score(test_labels, predictions, average='weighted')
+reca_scr_wei = recall_score(test_labels, predictions, average='weighted')
 f1_scr_macro = f1_score(test_labels, predictions, average='macro')
 prec_scr_macro = precision_score(test_labels, predictions, average='macro')
-reca_scr_macro = precision_score(test_labels, predictions, average='macro')
+reca_scr_macro = recall_score(test_labels, predictions, average='macro')
 
 print(
     f"Predicted {len(test_entities)} entities with\n"

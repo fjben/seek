@@ -5,3 +5,4 @@ stored_models
 node_classifier/data
 node_classifier/model
 node_classifier/model_backup
+node_classifier/cv_model

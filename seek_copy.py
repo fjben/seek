@@ -787,3 +787,4 @@ if __name__== '__main__':
 
     compute_effectiveness_kelpie(dataset_labels, path_graph, path_label_classes, path_embedding_classes,
                                  entity_to_neighbours_path, path_file_model, path_explanations)
+    
