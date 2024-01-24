@@ -639,30 +639,47 @@ def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original
         # print('some_neighbours')
         # print(some_neighbours)
         candidate_neighbours_results[tuple(some_neighbours)] = pred_proba_predicted_class
-        if early_stop:
+
+        predicted_class_new = np.argmax(pred_proba_predicted_class)
+        # print(predicted_class_original)
+        # print(predicted_class_new)
+        # raise
+        if threshold == -1:
+            if explan_type == 'necessary':
+                if predicted_class_original != predicted_class_new:
+                    explanation_found = True
+            elif explan_type == 'sufficient':
+                if predicted_class_original == predicted_class_new:
+                    explanation_found = True
+        else:
             if explan_type == 'necessary':
                 if pred_proba_predicted_class_original - pred_proba_predicted_class >= threshold:
                     explanation_found = True
-                    current_best_neighbours = set(min(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
-                    return explanation_found, current_best_neighbours, candidate_neighbours_results
             elif explan_type == 'sufficient':
                 if pred_proba_predicted_class_original - pred_proba_predicted_class <= threshold:
                     explanation_found = True
-                    current_best_neighbours = set(max(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
-                    # print('here')
-                    # print(pred_proba_predicted_class_original, pred_proba_predicted_class)
-                    return explanation_found, current_best_neighbours, candidate_neighbours_results
-            else:
-                raise Exception('must have a explan_type of explanation')
+
+
+        if early_stop:
+            if explan_type == 'necessary' and explanation_found:
+                current_best_neighbours = set(min(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
+                return explanation_found, current_best_neighbours, candidate_neighbours_results
+            elif explan_type == 'sufficient' and explanation_found:
+                current_best_neighbours = set(max(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
+                return explanation_found, current_best_neighbours, candidate_neighbours_results
+            ## with the combined bool test, if an explanation was not found it raised the exception but we want the
+            ## code to keep running
+            # else:
+            #     raise Exception('must have a explan_type of explanation')
 
     if explan_type == 'necessary':
         current_best_neighbours = set(min(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
-        explanation_found = True if pred_proba_predicted_class_original - pred_proba_predicted_class >= threshold else False
+        # explanation_found = True if pred_proba_predicted_class_original - pred_proba_predicted_class >= threshold else False
     elif explan_type == 'sufficient':
         # print('candidate_neighbours_results')
         # print(candidate_neighbours_results.items())
         current_best_neighbours = set(max(candidate_neighbours_results.items(), key=lambda x: x[1])[0])
-        explanation_found = True if pred_proba_predicted_class_original - pred_proba_predicted_class <= threshold else False
+        # explanation_found = True if pred_proba_predicted_class_original - pred_proba_predicted_class <= threshold else False
     else:
         raise Exception('must have a explan_type of explanation')
 
@@ -1017,10 +1034,7 @@ def pool_handler_tqdm(pool_size, input_data, items, verbose):
 #                                  max_len_explanations, n_embeddings=100):
 def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
                                  entity_to_neighbours, ml_model, results_summary, path_explanations,
-                                 max_len_explanations, n_jobs, n_embeddings=100):
-    
-    explanation_limit='threshold'
-    # explanation_limit='class_change'
+                                 max_len_explanations, explanation_limit, n_jobs, n_embeddings=100):
 
     multiproc = True
     # multiproc = False
@@ -1035,7 +1049,12 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
     # with open(model_stats_path, 'r') as f:
     #     results_summary = json.load(f)
 
-    threshold = results_summary['std_preds']
+    if explanation_limit == 'threshold':
+        threshold = results_summary['std_preds']
+    elif explanation_limit == 'class_change':
+        threshold = -1
+    else:
+        raise Exception('explanation_limit option is missing')
 
     # with open(path_embedding_classes, 'r') as f:
     #     dic_emb_classes = json.load(f)
@@ -1237,6 +1256,8 @@ if __name__== '__main__':
     # getExplanations(path_graph, path_label_classes, path_embedding_classes, entity_to_neighbours_path,
     #                 target_entity, alg, path_file_model, model_stats_path, path_explanations)
 
+    # explanation_limit='threshold'
+    explanation_limit='class_change'
 
     dataset_labels = list(zip(test_entities, test_labels))
     n_jobs = 1
@@ -1244,4 +1265,4 @@ if __name__== '__main__':
     # compute_effectiveness_kelpie(dataset_labels, path_embedding_classes, entity_to_neighbours_path, path_file_model,
     #                              model_stats_path, path_explanations, max_len_explanations)
     compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf,
-                                 model_stats_path, path_explanations, max_len_explanations, n_jobs)
+                                 model_stats_path, path_explanations, max_len_explanations, explanation_limit, n_jobs)

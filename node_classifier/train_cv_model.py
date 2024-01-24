@@ -30,9 +30,15 @@ tic_total_script_time = time.perf_counter()
 
 ############################################################################### arguments
 
-dataset = 'AIFB'
+# max_len_explanations=1
+max_len_explanations=5
+
+# explanation_limit='threshold'
+# explanation_limit='class_change'
+
+# dataset = 'AIFB'
 # dataset = 'MUTAG'
-# dataset = 'AM_FROM_DGL'
+dataset = 'AM_FROM_DGL'
 # dataset = 'MDGENRE'
 
 # aproximate_model=True
@@ -43,9 +49,6 @@ dataset = 'AIFB'
 
 n_splits = 10
 # n_splits = 2
-
-# max_len_explanations=1
-max_len_explanations=5
 
 verbose = 1
 
@@ -194,12 +197,12 @@ cpu_num = cpu_count()
 
 data_path = f'node_classifier/data/{dataset}'
 model_path = f'node_classifier/cv_model/{dataset}'
-# transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
-# entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/entity_to_neighbours.json'
-# path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/neighbours_embeddings.json'
-transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/models/RDF2Vec_{dataset}'
-entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/trained/entity_to_neighbours.json'
-path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/trained/neighbours_embeddings.json'
+transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
+entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/entity_to_neighbours.json'
+path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/neighbours_embeddings.json'
+# transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/models/RDF2Vec_{dataset}'
+# entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/trained/entity_to_neighbours.json'
+# path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/trained/neighbours_embeddings.json'
 
 with open(os.path.join(data_path, 'metadata.json'), 'r') as f:
     ds_metadata = json.load(f)
@@ -271,7 +274,8 @@ with open(path_embedding_classes, 'r') as f:
 
 def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                          train_index_files_designation, test_index_files_designation,
-                         aproximate_model, RANDOM_STATE, max_len_explanations, n_jobs, n_partitions):
+                         aproximate_model, RANDOM_STATE, max_len_explanations, explanation_limit, n_jobs,
+                         n_partitions):
     
     all_results_summary = []
     all_effectiveness_results_lenx = []
@@ -308,8 +312,8 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
         clf, results_summary, effectiveness_results = train_classifier(train_embeddings, train_labels, test_embeddings,
                                                                        test_labels, test_entities, aproximate_model,
                                                                        entity_to_neighbours, dic_emb_classes,
-                                                                       max_len_explanations, current_model_path,
-                                                                       n_jobs, RANDOM_STATE)
+                                                                       max_len_explanations, explanation_limit,
+                                                                       current_model_path, n_jobs, RANDOM_STATE)
 
         save_model_results(dataset, clf, current_model_models_path, current_model_models_results_path, current_model_trained_path,
              results_summary)
@@ -348,8 +352,8 @@ def get_embeddings(aproximate_model, all_embeddings, all_entities, entity_to_nei
 
 
 def train_classifier(train_embeddings, train_labels, test_embeddings, test_labels, test_entities, aproximate_model,
-                     entity_to_neighbours, dic_emb_classes, max_len_explanations, current_model_path, n_jobs,
-                     RANDOM_STATE):
+                     entity_to_neighbours, dic_emb_classes, max_len_explanations, explanation_limit,
+                     current_model_path, n_jobs, RANDOM_STATE):
     # Fit a Support Vector Machine on train embeddings and pick the best
     # C-parameters (regularization strength).
     param_grid = {"max_depth": [2, 4, 6, 8, 10]}
@@ -426,7 +430,8 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         #                              path_file_model, model_stats_path, path_explanations, max_len_explanations)
         effectiveness_results = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
                                                                   entity_to_neighbours, clf, results_summary,
-                                                                  path_explanations, max_len_explanations, n_jobs)
+                                                                  path_explanations, max_len_explanations,
+                                                                  explanation_limit, n_jobs)
         
         with open(os.path.join(path_explanations, f'effectiveness_results_len{max_len_explanations}.json'), 'w', encoding ='utf8') as f: 
             json.dump(effectiveness_results[0], f, ensure_ascii = False)
@@ -485,7 +490,8 @@ def global_results_dict(all_results):
     return global_results
     
 
-def save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, max_len_explanations):
+def save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, max_len_explanations,
+                        explanation_limit):
     global_results = global_results_dict(all_results_summary)
     # df = pd.DataFrame(all_results_summary)
     # columns = list(df.columns)
@@ -542,31 +548,43 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
     df.to_csv(os.path.join(model_path, f'global_results_{model_type}.csv'), sep='\t')
 
     if all_effectiveness_results[0] and all_effectiveness_results[1]:
-        with open(os.path.join(model_path, f'global_effectiveness_results_len{max_len_explanations}_{model_type}.json'), 'w', encoding ='utf8') as f: 
+        with open(os.path.join(model_path, f'global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_{model_type}.json'), 'w', encoding ='utf8') as f: 
             json.dump(global_effectiveness_results_lenx, f, ensure_ascii = False)
-        with open(os.path.join(model_path, f'global_effectiveness_results_len1_{model_type}.json'), 'w', encoding ='utf8') as f: 
+        with open(os.path.join(model_path, f'global_effectiveness_results_len1_{explanation_limit}_{model_type}.json'), 'w', encoding ='utf8') as f: 
             json.dump(global_effectiveness_results_len1, f, ensure_ascii = False)
         df = pd.DataFrame([global_effectiveness_results_lenx])
-        df.to_csv(os.path.join(model_path, f'global_effectiveness_results_len{max_len_explanations}_{model_type}.csv'), sep='\t')
+        df.to_csv(os.path.join(model_path, f'global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_{model_type}.csv'), sep='\t')
         df = pd.DataFrame([global_effectiveness_results_len1])
-        df.to_csv(os.path.join(model_path, f'global_effectiveness_results_len1_{model_type}.csv'), sep='\t')
+        df.to_csv(os.path.join(model_path, f'global_effectiveness_results_len1_{explanation_limit}_{model_type}.csv'), sep='\t')
 
 
 
+explanation_limit='threshold'
 
 aproximate_model = False
 all_results_summary, all_effectiveness_results = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
-                     max_len_explanations, n_jobs, n_partitions=n_splits)
+                     max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, max_len_explanations)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, max_len_explanations, explanation_limit)
+
+explanation_limit='threshold'
 
 aproximate_model = True
 all_results_summary, all_effectiveness_results = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
-                     max_len_explanations, n_jobs, n_partitions=n_splits)
+                     max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, max_len_explanations)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, max_len_explanations, explanation_limit)
+
+explanation_limit='class_change'
+
+aproximate_model = True
+all_results_summary, all_effectiveness_results = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+                     train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
+                     max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits)
+
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, max_len_explanations, explanation_limit)
 
 toc_total_script_time = time.perf_counter()
 print(f"\nTotal script time in ({toc_total_script_time - tic_total_script_time:0.4f}s)\n")
