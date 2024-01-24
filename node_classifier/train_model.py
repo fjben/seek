@@ -43,13 +43,13 @@ from utils.logger import Logger
 # dataset = 'AIFB'
 # dataset = 'MUTAG'
 # dataset = 'AM_FROM_DGL'
-# dataset = 'MOVIE_DATASET'
+# dataset = 'MDGENRE'
 
 # aproximate_model=True
 # aproximate_model=False
 
-best_embeddings_params = True
-# best_embeddings_params = False
+# best_embeddings_params = True
+best_embeddings_params = False
 
 embeddings_for_all_entities = True
 # embeddings_for_all_entities = False
@@ -234,7 +234,7 @@ except:
     RANDOM_STATE = 22
     workers = 1
 
-shutil.move('node_classifier/tmp/train_embeddings.log', os.path.join(current_model_models_results_path, 'train_embeddings.log'))
+shutil.move('node_classifier/tmp/train_models.log', os.path.join(current_model_models_results_path, 'train_models.log'))
 
 # n_jobs = 2 ## original specs found in online-learning.py
 n_jobs = cpu_num
@@ -284,7 +284,7 @@ if best_embeddings_params:
             sg=1
             max_depth=2
             max_walks=500
-        case 'MOVIE_DATASET':
+        case 'MDGENRE':
             vector_size=500
             sg=1
             max_depth=2

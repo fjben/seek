@@ -8,10 +8,10 @@ set -e
 # # set_workers_for_reproducibility=''
 # set_workers_for_reproducibility='--set_workers_for_reproducibility'
 
-# dataset='AIFB'
+dataset='AIFB'
 # dataset='MUTAG'
 # dataset='AM_FROM_DGL'
-dataset='MDGENRE'
+# dataset='MDGENRE'
 
 
 ############################################################################### script
@@ -39,6 +39,6 @@ python3 node_classifier/define_reproducibility_parameters.py $set_workers_for_re
     echo
     export PYTHONHASHSEED=$ranHashSeed
 
-    python3 node_classifier/train_model.py --dataset $dataset
+    # python3 node_classifier/train_model.py --dataset $dataset
     python3 node_classifier/train_model.py --dataset $dataset --aproximate_model
 done

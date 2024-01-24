@@ -9,7 +9,10 @@ import copy
 import gc
 import pandas as pd
 
+from multiprocessing import Pool
+
 import joblib
+from tqdm import tqdm
 import rdflib
 from rdflib.namespace import RDF, OWL, RDFS
 
@@ -674,10 +677,11 @@ def wrapper_method_for_explanation_selection(
     all_neigbours_set = set(all_neighbours)
 
     wrapper_explan = dict()
+    wrapper_explan_len1 = dict()
     
     current_neighbours_in_explanation = set()
     candidate_neighbours = set(all_neighbours)
-    # i = 0
+    explan_len1 = True
     while candidate_neighbours:
         # print('here')
         # print('current_neighbours_in_explanation')
@@ -691,6 +695,9 @@ def wrapper_method_for_explanation_selection(
                                                     current_neighbours_in_explanation, candidate_neighbours,
                                                     explan_type=explan_type)
         wrapper_explan.update(current_explan)
+        if explan_len1:
+            wrapper_explan_len1.update(current_explan)
+            explan_len1 = False
         # print(len(list(current_explan.keys())[0]))
         # print(list(current_explan.keys())[0])
         if explanation_found or len(list(current_explan.keys())[0]) == max_len_explanations:
@@ -710,13 +717,15 @@ def wrapper_method_for_explanation_selection(
     if explan_type == 'necessary':
         # wrapper_explan_numbers = min(wrapper_explan.items(), key=lambda x: x[1])
         wrapper_explan = list(min(wrapper_explan.items(), key=lambda x: x[1])[0])
+        wrapper_explan_len1 = list(min(wrapper_explan_len1.items(), key=lambda x: x[1])[0])
     elif explan_type == 'sufficient':
         # wrapper_explan_numbers = max(wrapper_explan.items(), key=lambda x: x[1])
         wrapper_explan = list(max(wrapper_explan.items(), key=lambda x: x[1])[0])
+        wrapper_explan_len1 = list(max(wrapper_explan_len1.items(), key=lambda x: x[1])[0])
     # print(necessary_explan)
     # raise
 
-    return wrapper_explan # , wrapper_explan_numbers
+    return wrapper_explan, wrapper_explan_len1 # , wrapper_explan_numbers
 
 
 def compute_nec_suf_delta(met, test_labels, predictions, predictions_necessary, predictions_sufficient, average_type=''):
@@ -751,6 +760,255 @@ def compute_performance_metrics_v2(test_labels, predictions, predictions_necessa
     return effectiveness_results
 
 
+def get_pred_withoutnecessary(ml_model, all_neighbours, necessary_explan, dic_emb_classes, n_embeddings):
+    vectors_withoutnecessary = []
+    for not_nec in all_neighbours:
+        if not_nec not in necessary_explan:
+            vectors_withoutnecessary.append(dic_emb_classes[not_nec])
+    if len(necessary_explan) == len(all_neighbours):
+        x_withoutnecessary = np.array([0 for j in range(n_embeddings)])
+    elif len(vectors_withoutnecessary) == 1:
+        x_withoutnecessary = np.array(vectors_withoutnecessary[0])
+    else:
+        x_withoutnecessary = np.average(np.array(vectors_withoutnecessary), 0)
+    pred_withoutnecessary = ml_model.predict(x_withoutnecessary.reshape(1, -1))[0]
+
+    return pred_withoutnecessary
+
+def get_pred_withsufficient(ml_model, all_neighbours, sufficient_explan, dic_emb_classes, n_embeddings):
+    vectors_withsufficient = []
+    for suf in all_neighbours:
+        if suf in sufficient_explan:
+            vectors_withsufficient.append(dic_emb_classes[suf])
+
+    if len(sufficient_explan) == 0:
+        x_withsufficient = np.array([0 for j in range(n_embeddings)])
+    elif len(sufficient_explan) == 1:
+        x_withsufficient = np.array(vectors_withsufficient[0])
+    else:
+        x_withsufficient = np.average(np.array(vectors_withsufficient), 0)
+    pred_withsufficient = ml_model.predict(x_withsufficient.reshape(1, -1))[0]
+
+    return pred_withsufficient
+
+
+def explain(input_data):
+    entity, label, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model, threshold, max_len_explanations = \
+        input_data
+    # print(entity, label)
+
+    # all_common_ancestors = list(nx.descendants(G, rdflib.term.URIRef(ent1)) & nx.descendants(G, rdflib.term.URIRef(ent2)))
+    # disjoint_common_ancestors, parents = [], {}
+    # for anc in all_common_ancestors:
+    #     parents[anc] = list(nx.descendants(G, anc))
+    # for ancestor in all_common_ancestors:
+    #     parent = False
+    #     for anc2 in all_common_ancestors:
+    #         if anc2 != ancestor:
+    #             if ancestor in parents[anc2]:
+    #                 parent = True
+    #     if parent == False:
+    #         if str(ancestor) in dic_emb_classes:
+    #             disjoint_common_ancestors.append(ancestor)
+
+    # with open(entity_to_neighbours_path, 'r') as f:
+    #     entity_to_neighbours = json.load(f)
+    # print(entity_to_neighbours)
+
+    all_neighbours = entity_to_neighbours[entity]
+
+    all_vectors = []
+    for neighbour in all_neighbours:
+        all_vectors.append(dic_emb_classes[neighbour])
+    if len(all_vectors) == 0:
+        all_avg_vectors = np.array([0 for i in range(n_embeddings)])
+    elif len(all_vectors) == 1:
+        all_avg_vectors = np.array(all_vectors[0])
+    else:
+        all_array_vectors = np.array(all_vectors)
+        all_avg_vectors = np.average(all_array_vectors, 0)
+
+    X_test_original = [all_avg_vectors.tolist()]
+    pred_original = ml_model.predict(X_test_original).tolist()[0]
+    pred_proba_original = ml_model.predict_proba(X_test_original).tolist()[0]
+    predicted_class_original = np.argmax(pred_proba_original)
+    pred_proba_predicted_class_original = pred_proba_original[predicted_class_original]
+
+
+
+
+    ## get the best single necessary and single sufficient explanations
+    # necessary_explan, sufficient_explan = [], []
+    necessary_explan, sufficient_explan = dict(), dict()
+
+    for neighbour in all_neighbours:
+
+        vectors = []
+        for neighbour2 in all_neighbours:
+            if neighbour2 != neighbour:
+                vectors.append(dic_emb_classes[neighbour2])
+
+        if len(vectors) == 0:
+            avg_vectors = np.array([0 for i in range(n_embeddings)])
+        elif len(vectors) == 1:
+            avg_vectors = np.array(vectors[0])
+        else:
+            array_vectors = np.array(vectors)
+            avg_vectors = np.average(array_vectors, 0)
+
+        X_test_without_dca = [avg_vectors.tolist()]
+        pred_without_dca = ml_model.predict(X_test_without_dca).tolist()[0]
+        proba_pred_without_dca = ml_model.predict_proba(X_test_without_dca).tolist()[0]
+        pred_proba_predicted_class_without_dca = proba_pred_without_dca[predicted_class_original]
+        necessary_explan[neighbour] = pred_proba_predicted_class_without_dca
+        # if explanation_limit == 'threshold':
+        #     if pred_proba_predicted_class_original - pred_proba_predicted_class_without_dca >= threshold:
+        #         necessary_explan.append(neighbour)
+        # elif explanation_limit == 'class_change':
+        #     if pred_original != pred_without_dca:
+        #         necessary_explan.append(neighbour)
+        # else:
+        #     raise Exception('invalid choice of explanation limit')
+
+        X_test_only_dca = [dic_emb_classes[neighbour]]
+        pred_only_dca = ml_model.predict(X_test_only_dca).tolist()[0]
+        proba_pred_only_dca = ml_model.predict_proba(X_test_only_dca).tolist()[0]
+        pred_proba_predicted_class_only_dca = proba_pred_only_dca[predicted_class_original]
+        sufficient_explan[neighbour] = pred_proba_predicted_class_only_dca
+        # if explanation_limit == 'threshold':
+        #     if pred_proba_predicted_class_original - pred_proba_predicted_class_without_dca <= threshold:
+        #         sufficient_explan.append(neighbour)
+        # elif explanation_limit == 'class_change':
+        #     if pred_original == pred_only_dca:
+        #         sufficient_explan.append(neighbour)
+        # else:
+        #     raise Exception('invalid choice of explanation limit')
+
+    # print(necessary_explan)
+    # necessary_explan_old = min(necessary_explan.items(), key=lambda x: x[1])
+    necessary_explan = [min(necessary_explan.items(), key=lambda x: x[1])[0]]
+
+    # print(sufficient_explan)
+    # sufficient_explan_old = max(sufficient_explan.items(), key=lambda x: x[1])
+    sufficient_explan = [max(sufficient_explan.items(), key=lambda x: x[1])[0]]
+
+    ## this was used to calculate nec and suf for SEEK
+    # if pred_original == label:
+
+    #     vectors_withoutnecessary = []
+    #     for not_nec in all_neighbours:
+    #         if not_nec not in necessary_explan:
+    #             vectors_withoutnecessary.append(dic_emb_classes[not_nec])
+    #     if len(necessary_explan) == len(all_neighbours):
+    #         x_withoutnecessary = np.array([0 for j in range(n_embeddings)])
+    #     elif len(vectors_withoutnecessary) == 1:
+    #         x_withoutnecessary = np.array(vectors_withoutnecessary[0])
+    #     else:
+    #         x_withoutnecessary = np.average(np.array(vectors_withoutnecessary), 0)
+    #     pred_withoutnecessary = ml_model.predict(x_withoutnecessary.reshape(1, -1))[0]
+
+    #     pred_eva_necessary.append(pred_withoutnecessary)
+    #     original_pred_eva_necessary.append(pred_original)
+    #     y_eva_necessary.append(label)
+
+    # if pred_original != label:
+        # vectors_withsufficient = []
+        # for suf in sufficient_explan:
+        #     vectors_withsufficient.append(dic_emb_classes[suf])
+        # if len(sufficient_explan) == 0:
+        #     x_withsufficient = np.array([0 for j in range(n_embeddings)])
+        # elif len(sufficient_explan) == 1:
+        #     x_withsufficient = np.array(vectors_withsufficient[0])
+        # else:
+        #     x_withsufficient = np.average(np.array(vectors_withsufficient), 0)
+        # pred_withsufficient = ml_model.predict(x_withsufficient.reshape(1, -1))[0]
+
+        # pred_eva_sufficient.append(pred_withsufficient)
+        # original_pred_eva_sufficient.append(pred_original)
+        # y_eva_sufficient.append(label)
+
+    necessary_explan, necessary_explan_len1 = wrapper_method_for_explanation_selection(
+        ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
+        n_embeddings, all_neighbours, max_len_explanations, explan_type='necessary')
+    
+    sufficient_explan, sufficient_explan_len1 = wrapper_method_for_explanation_selection(
+        ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
+        n_embeddings, all_neighbours, max_len_explanations, explan_type='sufficient')
+    
+    # all_necessary_explan.append(necessary_explan)
+    # all_sufficient_explan.append(sufficient_explan)
+
+    # if necessary_explan_old[0] != necessary_explan_numbers[0][0]:
+    #     print('difference found in necessary')
+    #     print(entity, '\n', necessary_explan_old, '\n', necessary_explan_numbers, '\n\n')
+
+    # if sufficient_explan_old[0] != sufficient_explan_numbers[0][0]:
+    #     print('difference found in sufficient')
+    #     print(entity, '\n', sufficient_explan_old, '\n', sufficient_explan_numbers, '\n\n')
+
+
+
+
+    ## necessary and sufficient:
+    ##     for all test entities instead of just the correcly predicted
+    ##     with just the top explanation instead of all the necessary explanations
+    ##     with threshold instead of changing class
+    ## necessary
+    pred_withoutnecessary = get_pred_withoutnecessary(ml_model, all_neighbours, necessary_explan, dic_emb_classes,
+                                                      n_embeddings)
+    pred_withoutnecessary_len1 = get_pred_withoutnecessary(ml_model, all_neighbours, necessary_explan_len1,
+                                                           dic_emb_classes, n_embeddings)
+
+    # pred_eva_necessary.append(pred_withoutnecessary)
+    # original_pred_eva_necessary.append(pred_original)
+    # y_eva_necessary.append(label)
+
+    ## sufficient before
+    # vectors_withsufficient = []
+    # for suf in sufficient_explan:
+    #     vectors_withsufficient.append(dic_emb_classes[suf])
+
+    # sufficient_explan = random.choice(all_neighbours)
+
+    pred_withsufficient = get_pred_withsufficient(ml_model, all_neighbours, sufficient_explan, dic_emb_classes,
+                                                  n_embeddings)
+    pred_withsufficient_len1 = get_pred_withsufficient(ml_model, all_neighbours, sufficient_explan_len1,
+                                                       dic_emb_classes, n_embeddings)
+
+
+    # pred_eva_sufficient.append(pred_withsufficient)
+    # original_pred_eva_sufficient.append(pred_original)
+    # y_eva_sufficient.append(label)
+
+    return label, pred_original, pred_withoutnecessary, pred_withsufficient, pred_withoutnecessary_len1, pred_withsufficient_len1
+
+def pool_handler(pool_size, input_data):
+    with Pool(pool_size) as p:
+        res = list(
+                p.map(explain,
+                        input_data,
+                        # chunksize=1
+                        )
+        )
+
+    return res
+
+
+def pool_handler_tqdm(pool_size, input_data, items, verbose):
+    with Pool(pool_size) as p:
+        res = list(
+            tqdm(
+                p.imap(explain,
+                        input_data,
+                        # chunksize=1
+                        ),
+                total=len(items),
+                disable=True if verbose == 0 else False,
+            )
+        )
+    return res
+
+
 # def compute_effectiveness_kelpie(dataset_labels, path_graph, path_label_classes, path_embedding_classes,
 #                                  entity_to_neighbours_path, path_file_model, model_stats_path, path_explanations,
 #                                  max_len_explanations, n_embeddings=100):
@@ -759,13 +1017,13 @@ def compute_performance_metrics_v2(test_labels, predictions, predictions_necessa
 #                                  max_len_explanations, n_embeddings=100):
 def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
                                  entity_to_neighbours, ml_model, results_summary, path_explanations,
-                                 max_len_explanations, n_embeddings=100):
+                                 max_len_explanations, n_jobs, n_embeddings=100):
     
     explanation_limit='threshold'
     # explanation_limit='class_change'
 
-    pred_eva_necessary, original_pred_eva_necessary, y_eva_necessary = [], [], []
-    pred_eva_sufficient, original_pred_eva_sufficient, y_eva_sufficient = [], [], []
+    multiproc = True
+    # multiproc = False
 
     # all_necessary_explan, all_sufficient_explan = [], []
 
@@ -786,208 +1044,60 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
 
     # ml_model = joblib.load(path_file_model)
 
-    # for (entity, label) in dataset_labels[33:34]:
-    # for (entity, label) in dataset_labels[0:1]:
-    # for (entity, label) in dataset_labels[2:3]:
-    for (entity, label) in dataset_labels:
-        print(entity, label)
+    pred_eva_necessary, pred_eva_necessary_len1, original_pred_eva_necessary, y_eva_necessary = [], [], [], []
+    pred_eva_sufficient, pred_eva_sufficient_len1, original_pred_eva_sufficient, y_eva_sufficient = [], [], [], []
+    if multiproc:
+        num_items = len(dataset_labels)
+        entities = [entity for (entity, _) in dataset_labels]
+        labels = [label for (_, label) in dataset_labels]
+        input_data = zip(
+            [entity for (entity, _) in dataset_labels],
+            [label for (_, label) in dataset_labels],
+            [entity_to_neighbours] * num_items,
+            [dic_emb_classes] * num_items,
+            [n_embeddings] * num_items,
+            [ml_model] * num_items,
+            [threshold] * num_items,
+            [max_len_explanations] * num_items,
+        )
+        input_data = tuple(list(map(list, input_data)))
+        # res = pool_handler(n_jobs, input_data)
+        print(f'Parallelizing explanations:')
+        res = pool_handler_tqdm(n_jobs, input_data, dataset_labels, verbose=True)
 
-        # all_common_ancestors = list(nx.descendants(G, rdflib.term.URIRef(ent1)) & nx.descendants(G, rdflib.term.URIRef(ent2)))
-        # disjoint_common_ancestors, parents = [], {}
-        # for anc in all_common_ancestors:
-        #     parents[anc] = list(nx.descendants(G, anc))
-        # for ancestor in all_common_ancestors:
-        #     parent = False
-        #     for anc2 in all_common_ancestors:
-        #         if anc2 != ancestor:
-        #             if ancestor in parents[anc2]:
-        #                 parent = True
-        #     if parent == False:
-        #         if str(ancestor) in dic_emb_classes:
-        #             disjoint_common_ancestors.append(ancestor)
+        for item in res:
+            label, pred_original, pred_withoutnecessary, pred_withsufficient, pred_withoutnecessary_len1, \
+                pred_withsufficient_len1 = item
+            y_eva_necessary.append(label)
+            y_eva_sufficient.append(label)
+            original_pred_eva_necessary.append(pred_original)
+            original_pred_eva_sufficient.append(pred_original)
+            pred_eva_necessary.append(pred_withoutnecessary)
+            pred_eva_sufficient.append(pred_withsufficient)
+            pred_eva_necessary_len1.append(pred_withoutnecessary_len1)
+            pred_eva_sufficient_len1.append(pred_withsufficient_len1)
+    else:
+        # for (entity, label) in dataset_labels[33:34]:
+        # for (entity, label) in dataset_labels[0:1]:
+        # for (entity, label) in dataset_labels[2:3]:
+        for (entity, label) in dataset_labels:
+            input_data = [entity, label, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model, threshold,
+                          max_len_explanations]
+            label, \
+            pred_original, \
+            pred_withoutnecessary, \
+            pred_withsufficient, \
+            pred_withoutnecessary_len1, \
+            pred_withsufficient_len1 = explain(input_data)
+            y_eva_necessary.append(label)
+            y_eva_sufficient.append(label)
+            original_pred_eva_necessary.append(pred_original)
+            original_pred_eva_sufficient.append(pred_original)
+            pred_eva_necessary.append(pred_withoutnecessary)
+            pred_eva_sufficient.append(pred_withsufficient)
+            pred_eva_necessary_len1.append(pred_withoutnecessary_len1)
+            pred_eva_sufficient_len1.append(pred_withsufficient_len1)
 
-        # with open(entity_to_neighbours_path, 'r') as f:
-        #     entity_to_neighbours = json.load(f)
-        # print(entity_to_neighbours)
-
-        all_neighbours = entity_to_neighbours[entity]
-
-        all_vectors = []
-        for neighbour in all_neighbours:
-            all_vectors.append(dic_emb_classes[neighbour])
-        if len(all_vectors) == 0:
-            all_avg_vectors = np.array([0 for i in range(n_embeddings)])
-        elif len(all_vectors) == 1:
-            all_avg_vectors = np.array(all_vectors[0])
-        else:
-            all_array_vectors = np.array(all_vectors)
-            all_avg_vectors = np.average(all_array_vectors, 0)
-
-        X_test_original = [all_avg_vectors.tolist()]
-        pred_original = ml_model.predict(X_test_original).tolist()[0]
-        pred_proba_original = ml_model.predict_proba(X_test_original).tolist()[0]
-        predicted_class_original = np.argmax(pred_proba_original)
-        pred_proba_predicted_class_original = pred_proba_original[predicted_class_original]
-
-
-
-
-        ## get the best single necessary and single sufficient explanations
-        # necessary_explan, sufficient_explan = [], []
-        necessary_explan, sufficient_explan = dict(), dict()
-
-        for neighbour in all_neighbours:
-
-            vectors = []
-            for neighbour2 in all_neighbours:
-                if neighbour2 != neighbour:
-                    vectors.append(dic_emb_classes[neighbour2])
-
-            if len(vectors) == 0:
-                avg_vectors = np.array([0 for i in range(n_embeddings)])
-            elif len(vectors) == 1:
-                avg_vectors = np.array(vectors[0])
-            else:
-                array_vectors = np.array(vectors)
-                avg_vectors = np.average(array_vectors, 0)
-
-            X_test_without_dca = [avg_vectors.tolist()]
-            pred_without_dca = ml_model.predict(X_test_without_dca).tolist()[0]
-            proba_pred_without_dca = ml_model.predict_proba(X_test_without_dca).tolist()[0]
-            pred_proba_predicted_class_without_dca = proba_pred_without_dca[predicted_class_original]
-            necessary_explan[neighbour] = pred_proba_predicted_class_without_dca
-            # if explanation_limit == 'threshold':
-            #     if pred_proba_predicted_class_original - pred_proba_predicted_class_without_dca >= threshold:
-            #         necessary_explan.append(neighbour)
-            # elif explanation_limit == 'class_change':
-            #     if pred_original != pred_without_dca:
-            #         necessary_explan.append(neighbour)
-            # else:
-            #     raise Exception('invalid choice of explanation limit')
-
-            X_test_only_dca = [dic_emb_classes[neighbour]]
-            pred_only_dca = ml_model.predict(X_test_only_dca).tolist()[0]
-            proba_pred_only_dca = ml_model.predict_proba(X_test_only_dca).tolist()[0]
-            pred_proba_predicted_class_only_dca = proba_pred_only_dca[predicted_class_original]
-            sufficient_explan[neighbour] = pred_proba_predicted_class_only_dca
-            # if explanation_limit == 'threshold':
-            #     if pred_proba_predicted_class_original - pred_proba_predicted_class_without_dca <= threshold:
-            #         sufficient_explan.append(neighbour)
-            # elif explanation_limit == 'class_change':
-            #     if pred_original == pred_only_dca:
-            #         sufficient_explan.append(neighbour)
-            # else:
-            #     raise Exception('invalid choice of explanation limit')
-
-        # print(necessary_explan)
-        necessary_explan_old = min(necessary_explan.items(), key=lambda x: x[1])
-        necessary_explan = [min(necessary_explan.items(), key=lambda x: x[1])[0]]
-
-        # print(sufficient_explan)
-        sufficient_explan_old = max(sufficient_explan.items(), key=lambda x: x[1])
-        sufficient_explan = [max(sufficient_explan.items(), key=lambda x: x[1])[0]]
-
-        ## this was used to calculate nec and suf for SEEK
-        # if pred_original == label:
-
-        #     vectors_withoutnecessary = []
-        #     for not_nec in all_neighbours:
-        #         if not_nec not in necessary_explan:
-        #             vectors_withoutnecessary.append(dic_emb_classes[not_nec])
-        #     if len(necessary_explan) == len(all_neighbours):
-        #         x_withoutnecessary = np.array([0 for j in range(n_embeddings)])
-        #     elif len(vectors_withoutnecessary) == 1:
-        #         x_withoutnecessary = np.array(vectors_withoutnecessary[0])
-        #     else:
-        #         x_withoutnecessary = np.average(np.array(vectors_withoutnecessary), 0)
-        #     pred_withoutnecessary = ml_model.predict(x_withoutnecessary.reshape(1, -1))[0]
-
-        #     pred_eva_necessary.append(pred_withoutnecessary)
-        #     original_pred_eva_necessary.append(pred_original)
-        #     y_eva_necessary.append(label)
-
-        # if pred_original != label:
-            # vectors_withsufficient = []
-            # for suf in sufficient_explan:
-            #     vectors_withsufficient.append(dic_emb_classes[suf])
-            # if len(sufficient_explan) == 0:
-            #     x_withsufficient = np.array([0 for j in range(n_embeddings)])
-            # elif len(sufficient_explan) == 1:
-            #     x_withsufficient = np.array(vectors_withsufficient[0])
-            # else:
-            #     x_withsufficient = np.average(np.array(vectors_withsufficient), 0)
-            # pred_withsufficient = ml_model.predict(x_withsufficient.reshape(1, -1))[0]
-
-            # pred_eva_sufficient.append(pred_withsufficient)
-            # original_pred_eva_sufficient.append(pred_original)
-            # y_eva_sufficient.append(label)
-
-        necessary_explan = wrapper_method_for_explanation_selection(
-            ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
-            n_embeddings, all_neighbours, max_len_explanations, explan_type='necessary')
-        
-        sufficient_explan = wrapper_method_for_explanation_selection(
-            ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
-            n_embeddings, all_neighbours, max_len_explanations, explan_type='sufficient')
-        
-        # all_necessary_explan.append(necessary_explan)
-        # all_sufficient_explan.append(sufficient_explan)
-
-        # if necessary_explan_old[0] != necessary_explan_numbers[0][0]:
-        #     print('difference found in necessary')
-        #     print(entity, '\n', necessary_explan_old, '\n', necessary_explan_numbers, '\n\n')
-
-        # if sufficient_explan_old[0] != sufficient_explan_numbers[0][0]:
-        #     print('difference found in sufficient')
-        #     print(entity, '\n', sufficient_explan_old, '\n', sufficient_explan_numbers, '\n\n')
-
-
-
-
-        ## necessary and sufficient:
-        ##     for all test entities instead of just the correcly predicted
-        ##     with just the top explanation instead of all the necessary explanations
-        ##     with threshold instead of changing class
-        ## necessary
-        vectors_withoutnecessary = []
-        for not_nec in all_neighbours:
-            if not_nec not in necessary_explan:
-                vectors_withoutnecessary.append(dic_emb_classes[not_nec])
-        if len(necessary_explan) == len(all_neighbours):
-            x_withoutnecessary = np.array([0 for j in range(n_embeddings)])
-        elif len(vectors_withoutnecessary) == 1:
-            x_withoutnecessary = np.array(vectors_withoutnecessary[0])
-        else:
-            x_withoutnecessary = np.average(np.array(vectors_withoutnecessary), 0)
-        pred_withoutnecessary = ml_model.predict(x_withoutnecessary.reshape(1, -1))[0]
-
-        pred_eva_necessary.append(pred_withoutnecessary)
-        original_pred_eva_necessary.append(pred_original)
-        y_eva_necessary.append(label)
-
-        ## sufficient before
-        # vectors_withsufficient = []
-        # for suf in sufficient_explan:
-        #     vectors_withsufficient.append(dic_emb_classes[suf])
-
-        # sufficient_explan = random.choice(all_neighbours)
-
-        vectors_withsufficient = []
-        for suf in all_neighbours:
-            if suf in sufficient_explan:
-                vectors_withsufficient.append(dic_emb_classes[suf])
-
-        if len(sufficient_explan) == 0:
-            x_withsufficient = np.array([0 for j in range(n_embeddings)])
-        elif len(sufficient_explan) == 1:
-            x_withsufficient = np.array(vectors_withsufficient[0])
-        else:
-            x_withsufficient = np.average(np.array(vectors_withsufficient), 0)
-        pred_withsufficient = ml_model.predict(x_withsufficient.reshape(1, -1))[0]
-
-        pred_eva_sufficient.append(pred_withsufficient)
-        original_pred_eva_sufficient.append(pred_original)
-        y_eva_sufficient.append(label)
 
     # print('all_necessary_explan')
     # print(all_necessary_explan)
@@ -998,8 +1108,11 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
     # print(len(original_pred_eva_necessary), '\n')
     # print(len(y_eva_necessary))
     
-    effectiveness_results = compute_performance_metrics_v2(y_eva_necessary, original_pred_eva_necessary,
+    effectiveness_results_lenx = compute_performance_metrics_v2(y_eva_necessary, original_pred_eva_necessary,
                                                            pred_eva_necessary, pred_eva_sufficient)
+    
+    effectiveness_results_len1 = compute_performance_metrics_v2(y_eva_necessary, original_pred_eva_necessary,
+                                                           pred_eva_necessary_len1, pred_eva_sufficient_len1)
 
     original_waf_necc, original_pr_necc, original_re_necc = compute_performance_metrics(original_pred_eva_necessary,y_eva_necessary)
     waf_necc, pr_necc, re_necc = compute_performance_metrics(pred_eva_necessary, y_eva_necessary)
@@ -1019,7 +1132,7 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
         file_output.write('Sufficient\t' + str(waf_suf) + '\t' + str(pr_suf) + '\t' + str(re_suf) + '\n')
         file_output.write('DeltaSufficient\t' + str(waf_suf - original_waf_suf) + '\t' + str(pr_suf - original_pr_suf) + '\t' + str(re_suf - original_re_suf) + '\n')
     
-    return effectiveness_results
+    return [effectiveness_results_lenx, effectiveness_results_len1]
 
 if __name__== '__main__':
 
@@ -1126,8 +1239,9 @@ if __name__== '__main__':
 
 
     dataset_labels = list(zip(test_entities, test_labels))
+    n_jobs = 1
 
     # compute_effectiveness_kelpie(dataset_labels, path_embedding_classes, entity_to_neighbours_path, path_file_model,
     #                              model_stats_path, path_explanations, max_len_explanations)
     compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf,
-                                 model_stats_path, path_explanations, max_len_explanations)
+                                 model_stats_path, path_explanations, max_len_explanations, n_jobs)
