@@ -41,5 +41,5 @@ python3 node_classifier/define_reproducibility_parameters.py $set_workers_for_re
 
     # python3 node_classifier/train_model.py --dataset $dataset
     # python3 node_classifier/train_model.py --dataset $dataset --aproximate_model
-    python3 run_OpenKEembeddings.py
+    python3 run_OpenKEembeddings_v2.py
 done

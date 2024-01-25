@@ -9,6 +9,7 @@ import rdflib
 from rdflib.namespace import RDF, OWL, RDFS
 import sys
 
+sys.path.append(os.path.realpath(os.path.join(os.path.abspath(__file__), os.path.pardir, os.path.pardir)))
 from OpenKE import config
 from OpenKE import models
 
@@ -246,7 +247,7 @@ def write_embeddings(path_model_json, path_embeddings_output, ents, dic_nodes):
 
 def construct_kg(kg_file_path):
     g = rdflib.Graph()
-    g.parse(ontology_file_path, format='xml')
+    g.parse(kg_file_path) ## , format='xml')
     return g
 
 def buildIds(g):
@@ -275,19 +276,29 @@ def buildIds(g):
 
     return dic_nodes, dic_relations, list_triples
 
-def run_embedddings(kg_file_path, entities_file_path, vector_size, path_output, embedding_models, path_openke):
+def run_embedddings(kg_file_path, entities_file_path, entities, vector_size, path_output, embedding_models, path_openke):
 
     g = construct_kg(kg_file_path)
     dic_nodes, dic_relations, list_triples = buildIds(g)
 
-    ents = [line.strip() for line in open(entities_file_path).readlines()]
+    # ents = [line.strip() for line in open(entities_file_path).readlines()]
+    ents = entities
 
     for embedding_model in embedding_models:
-        construct_model(dic_nodes, dic_relations, list_triples, path_openke, model_embedding)
-        path_model_json = path_openke + model_embedding + "/embedding.vec.json"
-        path_embeddings_output = path_output + '/' + model_embedding + '/' + 'Emb_' + model_embedding + '_' + str(vector_size) + '.txt'
+        construct_model(dic_nodes, dic_relations, list_triples, path_openke, embedding_model)
+        path_model_json = path_openke + embedding_model + "/embedding.vec.json"
+        path_embeddings_output = path_output + '/' + embedding_model + '/' + 'Emb_' + embedding_model + '_' + str(vector_size) + '.txt'
         write_embeddings(path_model_json, path_embeddings_output, ents, dic_nodes)
 
+
+def get_all_entities(graph):
+    # all_entities = [entity for entity in graph.subjects(unique=True) if not isinstance(entity, (rdflib.Literal, rdflib.BNode))]
+    all_subjects = {str(entity) for entity in graph.subjects(unique=True) if not isinstance(entity, (rdflib.Literal, rdflib.BNode))}
+    all_objects = {str(entity) for entity in graph.objects(unique=True) if not isinstance(entity, (rdflib.Literal, rdflib.BNode))}
+    all_entities = all_subjects.union(all_objects)
+    print(len(all_entities))
+
+    return list(all_entities)
 
 
 if __name__ == "__main__":
@@ -295,8 +306,25 @@ if __name__ == "__main__":
     embedding_models = ['TransE', 'TransH', 'distMult', 'ComplEx']
     vector_size = 100
 
-    kg_file_path = "Data/PPI/go-basic-annots.owl" # kg file
-    path_entity_file = "Data/PPI/Prots_v11(score950).txt" # file with entities for wich we wanna save the embeddings
+    dataset = 'AIFB'
+    # dataset = 'MUTAG'
+    # dataset = 'AM_FROM_DGL'
+    # dataset = 'MDGENRE'
+    
+    data_path = f'node_classifier/data/{dataset}'
+    with open(os.path.join(data_path, 'metadata.json'), 'r') as f:
+        ds_metadata = json.load(f)
+    location = os.path.join(data_path, ds_metadata['rdf_file'])
+
+    graph = rdflib.Graph().parse(location)
+    all_entities = get_all_entities(graph)
+
+
+
+    # kg_file_path = "Data/PPI/go-basic-annots.owl" # kg file
+    kg_file_path = location
+    entities_file_path = "Data/PPI/Prots_v11(score950).txt" # file with entities for wich we wanna save the embeddings
     path_output = "Embeddings/PPI" # folder where embeddings will be saved
-    path_openke = "./OpenKE/" # folder of OpenKE code
-    run_embedddings(kg_file_path, entities_file_path, vector_size, path_output, embedding_models, path_openke)
+    # path_openke = "./OpenKE/" # folder of OpenKE code
+    path_openke = "/home/fpaulino/SEEK/OpenKE" # folder of OpenKE code
+    run_embedddings(kg_file_path, entities_file_path, all_entities, vector_size, path_output, embedding_models, path_openke)

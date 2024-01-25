@@ -10,3 +10,4 @@ node_classifier/cv_model_len1_len5_backup
 node_classifier/results_processed
 node_classifier/results_processed_len1_len5_backup
 node_classifier/tmp
+Embeddings/
