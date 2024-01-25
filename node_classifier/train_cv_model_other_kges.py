@@ -21,7 +21,7 @@ from sklearn.model_selection import StratifiedKFold
 from pyrdf2vec import RDF2VecTransformer
 
 sys.path.append(os.path.realpath(os.path.join(os.path.abspath(__file__), os.path.pardir, os.path.pardir)))
-from utils.logger import Logger
+# from utils.logger import Logger
 from run_seek_explanations import compute_effectiveness_kelpie
 
 
@@ -36,10 +36,15 @@ max_len_explanations=5
 # explanation_limit='threshold'
 # explanation_limit='class_change'
 
-# dataset = 'AIFB'
+dataset = 'AIFB'
 # dataset = 'MUTAG'
 # dataset = 'AM_FROM_DGL'
-dataset = 'MDGENRE'
+# dataset = 'MDGENRE'
+
+KGE_model = 'ComplEx'
+# KGE_model = 'distMult'
+# KGE_model = 'TransE'
+# KGE_model = 'TransH'
 
 # aproximate_model=True
 # aproximate_model=False
@@ -47,15 +52,15 @@ dataset = 'MDGENRE'
 # best_embeddings_params = True
 # best_embeddings_params = False
 
-n_splits = 10
-# n_splits = 2
+# n_splits = 10
+n_splits = 2
 
 verbose = 1
 
 
 ############################################################################### logging
 
-sys.stdout = Logger()
+# sys.stdout = Logger()
 
 
 ############################################################################### functions
@@ -196,10 +201,13 @@ def stats_for_preds(predictions_proba):
 cpu_num = cpu_count()
 
 data_path = f'node_classifier/data/{dataset}'
-model_path = f'node_classifier/cv_model/{dataset}'
-transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
+model_path = f'node_classifier/cv_model_other_kges/{dataset}'
+# transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
 entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/entity_to_neighbours.json'
-path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/neighbours_embeddings.json'
+
+# path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/neighbours_embeddings.json'
+path_embedding_classes = f'Embeddings/node_classification/{KGE_model}/{dataset}_{KGE_model}_100.json'
+
 # transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/models/RDF2Vec_{dataset}'
 # entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/trained/entity_to_neighbours.json'
 # path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/trained/neighbours_embeddings.json'
@@ -262,15 +270,18 @@ print("Number of used cpu:\t", n_jobs, '\n')
 
 train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_path, n_splits)
 
-transformer = RDF2VecTransformer().load(transformer_model_path)
-all_embeddings = transformer._embeddings
-all_entities = transformer._entities
+# transformer = RDF2VecTransformer().load(transformer_model_path)
+# all_embeddings = transformer._embeddings
+# all_entities = transformer._entities
 
 with open(entity_to_neighbours_path, 'r') as f:
     entity_to_neighbours = json.load(f)
 
 with open(path_embedding_classes, 'r') as f:
     dic_emb_classes = json.load(f)
+
+all_embeddings = list(dic_emb_classes.values())
+all_entities = list(dic_emb_classes.keys())
 
 def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                          train_index_files_designation, test_index_files_designation,
@@ -589,4 +600,4 @@ save_global_results(aproximate_model, all_results_summary, all_effectiveness_res
 toc_total_script_time = time.perf_counter()
 print(f"\nTotal script time in ({toc_total_script_time - tic_total_script_time:0.4f}s)\n")
 
-shutil.move('node_classifier/tmp/train_models.log', os.path.join(model_path, 'train_models.log'))
+# shutil.move('node_classifier/tmp/train_models.log', os.path.join(model_path, 'train_models.log'))

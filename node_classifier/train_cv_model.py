@@ -262,6 +262,7 @@ print("Number of used cpu:\t", n_jobs, '\n')
 
 train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_path, n_splits)
 
+## I don't think I need this, I can load this information using the /trained data directly from the dict
 transformer = RDF2VecTransformer().load(transformer_model_path)
 all_embeddings = transformer._embeddings
 all_entities = transformer._entities

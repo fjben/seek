@@ -219,26 +219,37 @@ def write_embeddings(path_model_json, path_embeddings_output, ents, dic_nodes):
     embeddings_file.close()
 
     ensure_dir(path_embeddings_output)
-    with open(path_embeddings_output, 'w') as file_output:
-        file_output.write("{")
-        first = False
-        for i in range(len(ents)):
-            ent = ents[i]
-            if first:
-                if "ent_embeddings" in embeddings:
-                    file_output.write(", '%s':%s" % (str(ent), str(embeddings["ent_embeddings"][dic_nodes[str(ent)]])))
-                else:
-                    file_output.write(
-                        ", '%s':%s" % (str(ent), str(embeddings["ent_re_embeddings"][dic_nodes[str(ent)]])))
-            else:
-                if "ent_embeddings" in embeddings:
-                    file_output.write("'%s':%s" % (str(ent), str(embeddings["ent_embeddings"][dic_nodes[str(ent)]])))
-                else:
-                    file_output.write(
-                        "'%s':%s" % (str(ent), str(embeddings["ent_re_embeddings"][dic_nodes[str(ent)]])))
-                first = True
-        file_output.write("}")
-    file_output.close()
+    # with open(path_embeddings_output, 'w') as file_output:
+    #     file_output.write("{")
+    #     first = False
+    #     for i in range(len(ents)):
+    #         ent = ents[i]
+    #         if first:
+    #             if "ent_embeddings" in embeddings:
+    #                 file_output.write(", '%s':%s" % (str(ent), str(embeddings["ent_embeddings"][dic_nodes[str(ent)]])))
+    #             else:
+    #                 file_output.write(
+    #                     ", '%s':%s" % (str(ent), str(embeddings["ent_re_embeddings"][dic_nodes[str(ent)]])))
+    #         else:
+    #             if "ent_embeddings" in embeddings:
+    #                 file_output.write("'%s':%s" % (str(ent), str(embeddings["ent_embeddings"][dic_nodes[str(ent)]])))
+    #             else:
+    #                 file_output.write(
+    #                     "'%s':%s" % (str(ent), str(embeddings["ent_re_embeddings"][dic_nodes[str(ent)]])))
+    #             first = True
+    #     file_output.write("}")
+    # file_output.close()
+
+    dic_emb_classes = dict()
+    for ent in ents:
+        if "ent_embeddings" in embeddings:
+            dic_emb_classes[ent] = embeddings["ent_embeddings"][dic_nodes[str(ent)]]
+        else:
+            dic_emb_classes[ent] = embeddings["ent_re_embeddings"][dic_nodes[str(ent)]]
+    with open(path_embeddings_output + '.json', 'w', encoding ='utf8') as f: 
+        json.dump(dic_emb_classes, f, ensure_ascii = False)
+
+
 
 
 ########################################################################################################################
@@ -276,7 +287,7 @@ def buildIds(g):
 
     return dic_nodes, dic_relations, list_triples
 
-def run_embedddings(kg_file_path, entities_file_path, entities, vector_size, path_output, embedding_models, path_openke):
+def run_embedddings(dataset, kg_file_path, entities_file_path, entities, vector_size, path_output, embedding_models, path_openke):
 
     g = construct_kg(kg_file_path)
     dic_nodes, dic_relations, list_triples = buildIds(g)
@@ -287,7 +298,7 @@ def run_embedddings(kg_file_path, entities_file_path, entities, vector_size, pat
     for embedding_model in embedding_models:
         construct_model(dic_nodes, dic_relations, list_triples, path_openke, embedding_model)
         path_model_json = path_openke + embedding_model + "/embedding.vec.json"
-        path_embeddings_output = path_output + '/' + embedding_model + '/' + 'Emb_' + embedding_model + '_' + str(vector_size) + '.txt'
+        path_embeddings_output = path_output + '/' + embedding_model + '/' + dataset + '_' + embedding_model + '_' + str(vector_size)
         write_embeddings(path_model_json, path_embeddings_output, ents, dic_nodes)
 
 
@@ -324,7 +335,7 @@ if __name__ == "__main__":
     # kg_file_path = "Data/PPI/go-basic-annots.owl" # kg file
     kg_file_path = location
     entities_file_path = "Data/PPI/Prots_v11(score950).txt" # file with entities for wich we wanna save the embeddings
-    path_output = "Embeddings/PPI" # folder where embeddings will be saved
+    path_output = "Embeddings/node_classification" # folder where embeddings will be saved
     # path_openke = "./OpenKE/" # folder of OpenKE code
     path_openke = "/home/fpaulino/SEEK/OpenKE" # folder of OpenKE code
-    run_embedddings(kg_file_path, entities_file_path, all_entities, vector_size, path_output, embedding_models, path_openke)
+    run_embedddings(dataset, kg_file_path, entities_file_path, all_entities, vector_size, path_output, embedding_models, path_openke)
