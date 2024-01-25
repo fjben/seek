@@ -576,11 +576,12 @@ def compute_performance_metrics(predicted_labels, list_labels):
 ## get the wrapper method necessary (backward) and sufficient (forward) explanations
 def get_new_score(ml_model, X_test, predicted_class_original):
     X_test = [X_test.tolist()]
-    pred = ml_model.predict(X_test).tolist()[0]
+    # pred = ml_model.predict(X_test).tolist()[0]
     proba_pred = ml_model.predict_proba(X_test).tolist()[0]
+    predicted_class = np.argmax(proba_pred)
     pred_proba_predicted_class = proba_pred[predicted_class_original]
 
-    return pred_proba_predicted_class
+    return predicted_class, pred_proba_predicted_class
 
 
 def get_avg_vectors(vectors, n_embeddings):
@@ -635,21 +636,17 @@ def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original
         
         X_test = get_avg_vectors(avg_vectors, n_embeddings)
 
-        pred_proba_predicted_class = get_new_score(ml_model, X_test, predicted_class_original)
+        predicted_class, pred_proba_predicted_class = get_new_score(ml_model, X_test, predicted_class_original)
         # print('some_neighbours')
         # print(some_neighbours)
         candidate_neighbours_results[tuple(some_neighbours)] = pred_proba_predicted_class
 
-        predicted_class_new = np.argmax(pred_proba_predicted_class)
-        # print(predicted_class_original)
-        # print(predicted_class_new)
-        # raise
         if threshold == -1:
             if explan_type == 'necessary':
-                if predicted_class_original != predicted_class_new:
+                if predicted_class_original != predicted_class:
                     explanation_found = True
             elif explan_type == 'sufficient':
-                if predicted_class_original == predicted_class_new:
+                if predicted_class_original == predicted_class:
                     explanation_found = True
         else:
             if explan_type == 'necessary':

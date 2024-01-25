@@ -37,8 +37,8 @@ max_len_explanations=5
 # explanation_limit='class_change'
 
 # dataset = 'AIFB'
-# dataset = 'MUTAG'
-dataset = 'AM_FROM_DGL'
+dataset = 'MUTAG'
+# dataset = 'AM_FROM_DGL'
 # dataset = 'MDGENRE'
 
 # aproximate_model=True
