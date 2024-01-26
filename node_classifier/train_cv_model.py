@@ -36,8 +36,8 @@ max_len_explanations=5
 # explanation_limit='threshold'
 # explanation_limit='class_change'
 
-dataset = 'AIFB'
-# dataset = 'MUTAG'
+# dataset = 'AIFB'
+dataset = 'MUTAG'
 # dataset = 'AM_FROM_DGL'
 # dataset = 'MDGENRE'
 
@@ -66,12 +66,12 @@ def create_save_dirs(model_path, dataset, model_type, current_model_num):
     current_model_models_results_path = os.path.join(current_model_path, 'models_results')
     # os.makedirs(current_model_models_path)
     # os.makedirs(current_model_models_results_path)
-    ensure_dir(current_model_models_path)
-    ensure_dir(current_model_models_results_path)
+    ensure_dir(current_model_models_path, option='overwrite')
+    ensure_dir(current_model_models_results_path, option='overwrite')
     if model_type == 'RAN':
         current_model_trained_path = os.path.join(current_model_path, 'trained')
         # os.makedirs(current_model_trained_path)
-        ensure_dir(current_model_trained_path)
+        ensure_dir(current_model_trained_path, option='overwrite')
     elif model_type == 'RO':
         current_model_trained_path = None
 
@@ -101,11 +101,11 @@ def process_indexes_partition(file_partition):
     return indexes_partition
 
 
-def run_partition(entities, labels, filename_output, n_splits):
+def run_partition(entities, labels, filename_output, n_splits, random_state):
     index_partition = 0
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
     data_partitions_path = os.path.join(filename_output, 'data_partitions')
-    ensure_dir(data_partitions_path)
+    ensure_dir(data_partitions_path, option='overwrite')
     train_index_files_designation = os.path.join(data_partitions_path, 'Indexes_crossvalidationTrain_Run')
     test_index_files_designation = os.path.join(data_partitions_path, 'Indexes_crossvalidationTest_Run')
     for indexes_partition_train, indexes_partition_test in skf.split(entities, labels):
@@ -261,7 +261,7 @@ print('RANDOM_STATE:\t\t', RANDOM_STATE)
 print('workers:\t\t', workers)
 print("Number of used cpu:\t", n_jobs, '\n')
 
-train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_path, n_splits)
+train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_path, n_splits, RANDOM_STATE)
 
 ## I don't think I need this, I can load this information using the /trained data directly from the dict
 transformer = RDF2VecTransformer().load(transformer_model_path)
@@ -488,6 +488,7 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
 
         for key, [nec_len, suf_len] in explanations_dict_len1.items():
             path_entity_explanations = os.path.join(path_individual_explanations, f'{key.split("/")[-1]}')
+            ensure_dir(path_entity_explanations, option='make_if_not_exists')
             len_explanations = 1
             save_explanation(path_entity_explanations, len_explanations, explanation_limit, nec_len, 'necessary')
             save_explanation(path_entity_explanations, len_explanations, explanation_limit, suf_len, 'sufficient')
