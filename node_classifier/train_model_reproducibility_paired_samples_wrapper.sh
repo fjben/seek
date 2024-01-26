@@ -10,8 +10,8 @@ set -e
 
 # dataset='AIFB'
 # dataset='MUTAG'
-dataset='AM_FROM_DGL'
-# dataset='MDGENRE'
+# dataset='AM_FROM_DGL'
+dataset='MDGENRE'
 
 
 ############################################################################### script
@@ -40,8 +40,8 @@ python3 node_classifier/define_reproducibility_parameters.py $set_workers_for_re
     export PYTHONHASHSEED=$ranHashSeed
 
     # python3 node_classifier/train_model.py --dataset $dataset
-    # python3 node_classifier/train_model.py --dataset $dataset --aproximate_model
-    python3 run_OpenKEembeddings_v2.py --dataset $dataset
+    python3 node_classifier/train_model.py --dataset $dataset --aproximate_model
+    # python3 run_OpenKEembeddings_v2.py --dataset $dataset
 done
 
 

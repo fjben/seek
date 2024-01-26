@@ -1,3 +1,6 @@
+
+
+import argparse
 import json
 import os
 import random
@@ -7,6 +10,7 @@ import time
 import warnings
 
 from multiprocessing import cpu_count
+from collections import defaultdict
 from collections import OrderedDict
 
 from joblib import dump
@@ -30,6 +34,14 @@ tic_total_script_time = time.perf_counter()
 
 ############################################################################### arguments
 
+parser = argparse.ArgumentParser(description="description")
+parser.add_argument("--dataset",
+                    type=str,
+                    choices=['AIFB', 'MUTAG', 'AM_FROM_DGL', 'MDGENRE'],
+                    help="The dataset to use: FB15k, FB15k-237, WN18, WN18RR or YAGO3-10")
+args = parser.parse_args()
+dataset = args.dataset
+
 # max_len_explanations=1
 max_len_explanations=5
 
@@ -37,7 +49,7 @@ max_len_explanations=5
 # explanation_limit='class_change'
 
 # dataset = 'AIFB'
-dataset = 'MUTAG'
+# dataset = 'MUTAG'
 # dataset = 'AM_FROM_DGL'
 # dataset = 'MDGENRE'
 
@@ -282,6 +294,7 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
     all_results_summary = []
     all_effectiveness_results_lenx = []
     all_effectiveness_results_len1 = []
+    all_explain_stats = defaultdict(list)
     for index_partition in range(0, n_partitions):
         train_index = process_indexes_partition(train_index_files_designation + str(index_partition) + '.txt')
         test_index = process_indexes_partition(test_index_files_designation + str(index_partition) + '.txt')
@@ -311,7 +324,7 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
         # print(len(train_embeddings))
         # print(len(test_embeddings))
 
-        clf, results_summary, effectiveness_results = train_classifier(train_embeddings, train_labels, test_embeddings,
+        clf, results_summary, effectiveness_results, explain_stats = train_classifier(train_embeddings, train_labels, test_embeddings,
                                                                        test_labels, test_entities, aproximate_model,
                                                                        entity_to_neighbours, dic_emb_classes,
                                                                        max_len_explanations, explanation_limit,
@@ -323,12 +336,15 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
         all_results_summary.append(results_summary)
         all_effectiveness_results_lenx.append(effectiveness_results[0])
         all_effectiveness_results_len1.append(effectiveness_results[1])
+        if explain_stats:
+            for key, _ in explain_stats.items():
+                all_explain_stats[key].extend(explain_stats[key])
 
     if not any(all_effectiveness_results_lenx) and not any(all_effectiveness_results_len1):
         all_effectiveness_results_lenx = False
         all_effectiveness_results_len1 = False
 
-    return all_results_summary, [all_effectiveness_results_lenx, all_effectiveness_results_len1]
+    return all_results_summary, [all_effectiveness_results_lenx, all_effectiveness_results_len1], all_explain_stats
 
 def get_embeddings(aproximate_model, all_embeddings, all_entities, entity_to_neighbours, entities):
     if aproximate_model:
@@ -465,7 +481,7 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
 
         # compute_effectiveness_kelpie(dataset_labels, path_embedding_classes, entity_to_neighbours_path,
         #                              path_file_model, model_stats_path, path_explanations, max_len_explanations)
-        effectiveness_results, explanations_dicts = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
+        effectiveness_results, explanations_dicts, explain_stats = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
                                                                   entity_to_neighbours, clf, results_summary,
                                                                   path_explanations, max_len_explanations,
                                                                   explanation_limit, n_jobs)
@@ -494,8 +510,9 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
             save_explanation(path_entity_explanations, len_explanations, explanation_limit, suf_len, 'sufficient')
     else:
         effectiveness_results = [False, False]
+        explain_stats = False
 
-    return clf, results_summary, effectiveness_results
+    return clf, results_summary, effectiveness_results, explain_stats
 
 
 def save_model_results(dataset, clf, current_model_models_path, current_model_models_results_path, current_model_trained_path,
@@ -541,8 +558,8 @@ def global_results_dict(all_results):
     return global_results
     
 
-def save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, max_len_explanations,
-                        explanation_limit):
+def save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats,
+                        max_len_explanations, explanation_limit):
     global_results = global_results_dict(all_results_summary)
     # df = pd.DataFrame(all_results_summary)
     # columns = list(df.columns)
@@ -558,8 +575,6 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
     if all_effectiveness_results[0] and all_effectiveness_results[1]:
         global_effectiveness_results_lenx = global_results_dict(all_effectiveness_results[0])
         global_effectiveness_results_len1 = global_results_dict(all_effectiveness_results[1])
-
-
 
     # for d_to_print, description in zip([global_results, global_effectiveness_results],
     #                                    ['Global Classifier Results', 'Global Explainer Results']):
@@ -584,6 +599,23 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
         for key, value in global_effectiveness_results_len1.items():
             print(f'{key}: {value}')
         print('\n')
+
+    if all_effectiveness_results[0] or all_effectiveness_results[1]:
+        global_explain_stats = dict()
+        for key, value in all_explain_stats.items():
+            if key == 'explain_times':
+                total_time = np.sum(value)
+                global_explain_stats[f'{key}_total'] = total_time
+            if key != 'entities':
+                mean, std = np.mean(value), np.std(value)
+                global_explain_stats[f'{key}_mean'] = mean
+                global_explain_stats[f'{key}_std'] = std
+
+        print(f'\n##########     Explainer Stats     ##########')
+        for key, value in global_explain_stats.items():
+            print(f'{key}: {value}')
+        print('\n')
+    
         
     if aproximate_model:
         model_type = 'RAN' ## representation with aggregate neighbours
@@ -622,34 +654,41 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
             json.dump(global_effectiveness_results_len1, f, ensure_ascii = False)
         df = pd.DataFrame([global_effectiveness_results_len1])
         df.to_csv(os.path.join(model_path, f'global_effectiveness_results_len1_{explanation_limit}_{model_type}.csv'), sep='\t')
+    if all_effectiveness_results[0] or all_effectiveness_results[1]:
+        df = pd.DataFrame([global_explain_stats])
+        df.to_csv(os.path.join(model_path, f'global_explain_stats.csv'), sep='\t')
+        with open(os.path.join(model_path, f'global_explain_stats.json'), 'w', encoding ='utf8') as f: 
+            json.dump(global_explain_stats, f, ensure_ascii = False)
+
+    return global_results
 
 
 explanation_limit='threshold'
 
 aproximate_model = False
-all_results_summary, all_effectiveness_results = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
                      max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, max_len_explanations, explanation_limit)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
 explanation_limit='threshold'
 
 aproximate_model = True
-all_results_summary, all_effectiveness_results = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
                      max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, max_len_explanations, explanation_limit)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
 explanation_limit='class_change'
 
 aproximate_model = True
-all_results_summary, all_effectiveness_results = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
                      max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, max_len_explanations, explanation_limit)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
 toc_total_script_time = time.perf_counter()
 print(f"\nTotal script time in ({toc_total_script_time - tic_total_script_time:0.4f}s)\n")

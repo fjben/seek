@@ -6,8 +6,8 @@ import pandas as pd
 
 ############################################################################### arguments
 
-dataset = 'AIFB'
-# dataset = 'MUTAG'
+# dataset = 'AIFB'
+dataset = 'MUTAG'
 # dataset = 'AM_FROM_DGL'
 # dataset = 'MDGENRE'
 

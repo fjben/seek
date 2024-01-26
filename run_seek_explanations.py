@@ -9,6 +9,7 @@ import copy
 import gc
 import pandas as pd
 
+from collections import defaultdict
 from collections import OrderedDict
 
 from multiprocessing import Pool
@@ -898,6 +899,7 @@ def explain(input_data): ## can remove label is not doing nothing here
     #     input_data
     entity, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model, threshold, max_len_explanations = \
         input_data
+    tic = time.perf_counter()
     # print(entity, label)
 
     # all_common_ancestors = list(nx.descendants(G, rdflib.term.URIRef(ent1)) & nx.descendants(G, rdflib.term.URIRef(ent2)))
@@ -1142,8 +1144,11 @@ def explain(input_data): ## can remove label is not doing nothing here
     # original_pred_eva_sufficient.append(pred_original)
     # y_eva_sufficient.append(label)
 
+    toc = time.perf_counter()
+    explain_entity_time = toc - tic
+
     # return label, pred_original, pred_withoutnecessary, pred_withsufficient, pred_withoutnecessary_len1, pred_withsufficient_len1
-    return necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict
+    return necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict, explain_entity_time
 
 def pool_handler(pool_size, input_data):
     with Pool(pool_size) as p:
@@ -1220,6 +1225,7 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
     original_pred_eva = []
     explanations_dict_lenx = dict()
     explanations_dict_len1 = dict()
+    explain_stats = defaultdict(list)
 
     if multiproc:
         num_items = len(dataset_labels)
@@ -1254,7 +1260,8 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
         #     pred_eva_sufficient_len1.append(pred_withsufficient_len1)
 
         for entity, label, item in zip(entities, labels, res):
-            necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict = item
+            necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict, \
+                explain_entity_time = item
 
             dicts_to_add_label_info = [necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict]
             for dict_to_add_lab_info in dicts_to_add_label_info:
@@ -1283,6 +1290,14 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
 
             explanations_dict_lenx[entity] = [necessary_explan_dict, sufficient_explan_dict]
             explanations_dict_len1[entity] = [necessary_explan_len1_dict, sufficient_explan_len1_dict]
+
+            explain_stats['entities'].append(entity)
+            explain_stats['explain_times'].append(explain_entity_time)
+            explain_stats[f'necessary_len{max_len_explanations}_facts_qtt'].append(len(list(necessary_explan_dict.keys())[1]))
+            explain_stats['necessary_len1_facts_qtt'].append(len(list(necessary_explan_len1_dict.keys())[1]))
+            explain_stats[f'sufficient_len{max_len_explanations}_facts_qtt'].append(len(list(sufficient_explan_dict.keys())[1]))
+            explain_stats['sufficient_len1_facts_qtt'].append(len(list(sufficient_explan_len1_dict.keys())[1]))
+
 
     else:
         # for (entity, label) in dataset_labels[33:34]:
@@ -1347,6 +1362,19 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
             explanations_dict_lenx[entity] = [necessary_explan_dict, sufficient_explan_dict]
             explanations_dict_len1[entity] = [necessary_explan_len1_dict, sufficient_explan_len1_dict]
 
+            # print(list(necessary_explan_dict.values())[1][4], '\n')
+            # print(list(necessary_explan_dict.values())[1])
+            # print('\n')
+            # print(list(necessary_explan_dict.values())[1], '\n')
+            # print(list(necessary_explan_dict))
+            # print(len(list(necessary_explan_dict.keys())[1]))
+            explain_stats['entities'].append(entity)
+            explain_stats['explain_times'].append(explain_entity_time)
+            explain_stats[f'necessary_len{max_len_explanations}_facts_qtt'].append(len(list(necessary_explan_dict.keys())[1]))
+            explain_stats['necessary_len1_facts_qtt'].append(len(list(necessary_explan_len1_dict.keys())[1]))
+            explain_stats[f'sufficient_len{max_len_explanations}_facts_qtt'].append(len(list(sufficient_explan_dict.keys())[1]))
+            explain_stats['sufficient_len1_facts_qtt'].append(len(list(sufficient_explan_len1_dict.keys())[1]))
+
     # print('all_necessary_explan')
     # print(all_necessary_explan)
 
@@ -1405,7 +1433,8 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
     #     file_output.write('Sufficient\t' + str(waf_suf) + '\t' + str(pr_suf) + '\t' + str(re_suf) + '\n')
     #     file_output.write('DeltaSufficient\t' + str(waf_suf - original_waf_suf) + '\t' + str(pr_suf - original_pr_suf) + '\t' + str(re_suf - original_re_suf) + '\n')
     
-    return [effectiveness_results_lenx, effectiveness_results_len1], [explanations_dict_lenx, explanations_dict_len1]
+    return [effectiveness_results_lenx, effectiveness_results_len1], \
+        [explanations_dict_lenx, explanations_dict_len1], explain_stats
 
 if __name__== '__main__':
 
