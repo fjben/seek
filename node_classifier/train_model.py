@@ -77,6 +77,8 @@ def create_save_dirs(model_path, dataset, model_type, current_model_num):
 
 ## this could alternatively be accomplished using the pyRDF2Vec kg object with the get_neighbors method, one advantage
 ## is that it only needs to load the graph once for the kg object
+## or this code should go to some dataset object or folder the first time the dataset is used because the neighbours
+## are always the same
 def find_neighbours(graph, entities):        
     # Print the number of "triples" in the Graph
     print(f"Graph graph has {len(graph)} statements.")
@@ -95,12 +97,14 @@ def find_neighbours(graph, entities):
             # add all triples with subject 'bob'
             entitygraph += graph.triples((entity, None, None))
             entity_neighbours = []
+            entity_neighbour_relation = []
             for s, p, o in entitygraph:
                 if isinstance(o, (rdflib.Literal, rdflib.BNode)): ## ignoring literals
                     continue
                 all_neighbours.append(str(o))
                 entity_neighbours.append(str(o))
-            entity_to_neighbours[str(s)] = entity_neighbours
+                entity_neighbour_relation.append(str(p))
+            entity_to_neighbours[str(s)] = [entity_neighbours, entity_neighbour_relation]
 
     all_neighbours = list(set(all_neighbours))
 
@@ -179,7 +183,7 @@ else:
     ## sorts the models first to last using the name ending digits
     last_saved_model = saved_models.sort(key=lambda x: int(x.split('_')[-2]))
     last_saved_model_num = int(saved_models[-1].split('_')[-2])
-if os.path.exists('node_classifier/tmp/reproducibility_parameters.txt'):
+if os.path.exists('node_classifier/tmp/reproducibility_parameters_train_model.txt'):
     if aproximate_model:
         current_model_num = last_saved_model_num
         current_model_models_path, \
@@ -192,7 +196,7 @@ if os.path.exists('node_classifier/tmp/reproducibility_parameters.txt'):
         # os.makedirs(current_model_models_path)
         # os.makedirs(current_model_models_results_path)
         # os.makedirs(current_model_trained_path)
-        shutil.move('node_classifier/tmp/reproducibility_parameters.txt', os.path.join(current_model_models_path, 'reproducibility_parameters.txt'))
+        shutil.move('node_classifier/tmp/reproducibility_parameters_train_model.txt', os.path.join(current_model_models_path, 'reproducibility_parameters_train_model.txt'))
     else:
         current_model_num = last_saved_model_num + 1
         current_model_models_path, \
@@ -205,7 +209,7 @@ if os.path.exists('node_classifier/tmp/reproducibility_parameters.txt'):
         # os.makedirs(current_model_models_path)
         # os.makedirs(current_model_models_results_path)
         # os.makedirs(current_model_trained_path)
-        shutil.copy('node_classifier/tmp/reproducibility_parameters.txt', os.path.join(current_model_models_path, 'reproducibility_parameters.txt'))
+        shutil.copy('node_classifier/tmp/reproducibility_parameters_train_model.txt', os.path.join(current_model_models_path, 'reproducibility_parameters_train_model.txt'))
 else:
     current_model_num = last_saved_model_num + 1
     current_model_models_path, \
@@ -220,7 +224,7 @@ else:
     # os.makedirs(current_model_trained_path)
 
 try:
-    with open(os.path.join(current_model_models_path, 'reproducibility_parameters.txt')) as f:
+    with open(os.path.join(current_model_models_path, 'reproducibility_parameters_train_model.txt')) as f:
         lines = f.readlines()
     RANDOM_STATE = int(lines[5])
     workers = int(lines[7])
@@ -339,7 +343,7 @@ if aproximate_model:
         all_embeddings = neighbours_embeddings
 
     embeddings = []
-    for key, (entity, neighbours) in enumerate(entity_to_neighbours.items()):
+    for key, (entity, [neighbours, _]) in enumerate(entity_to_neighbours.items()):
         entity_neighbours_embeddings = []
         for neighbour in neighbours:
             idx = transformer._entities.index(neighbour)

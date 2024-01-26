@@ -1,3 +1,4 @@
+import argparse
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -313,11 +314,20 @@ def get_all_entities(graph):
 
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="description")
+    parser.add_argument("--dataset",
+                        type=str,
+                        choices=['AIFB', 'MUTAG', 'AM_FROM_DGL', 'MDGENRE'],
+                        help="The dataset to use: FB15k, FB15k-237, WN18, WN18RR or YAGO3-10")
+    args = parser.parse_args()
+    dataset = args.dataset
+
     #################################### Parameters ####################################
     embedding_models = ['TransE', 'TransH', 'distMult', 'ComplEx']
     vector_size = 100
 
-    dataset = 'AIFB'
+    # dataset = 'AIFB'
     # dataset = 'MUTAG'
     # dataset = 'AM_FROM_DGL'
     # dataset = 'MDGENRE'

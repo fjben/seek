@@ -4,11 +4,8 @@ __pycache__/
 stored_models
 node_classifier/data
 node_classifier/model
-node_classifier/model_backup
 node_classifier/cv_model
-node_classifier/cv_model_len1_len5_backup
 node_classifier/cv_model_other_kges
 node_classifier/results_processed
-node_classifier/results_processed_len1_len5_backup
 node_classifier/tmp
 Embeddings/

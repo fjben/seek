@@ -36,10 +36,10 @@ max_len_explanations=5
 # explanation_limit='threshold'
 # explanation_limit='class_change'
 
-# dataset = 'AIFB'
+dataset = 'AIFB'
 # dataset = 'MUTAG'
 # dataset = 'AM_FROM_DGL'
-dataset = 'MDGENRE'
+# dataset = 'MDGENRE'
 
 # aproximate_model=True
 # aproximate_model=False
@@ -334,7 +334,7 @@ def get_embeddings(aproximate_model, all_embeddings, all_entities, entity_to_nei
         embeddings = []
         # for key, (entity, neighbours) in enumerate(entity_to_neighbours.items()):
         for entity in entities:
-            neighbours = entity_to_neighbours[entity]
+            [neighbours, _] = entity_to_neighbours[entity]
             entity_neighbours_embeddings = []
             for neighbour in neighbours:
                 idx = all_entities.index(neighbour)
@@ -350,6 +350,35 @@ def get_embeddings(aproximate_model, all_embeddings, all_entities, entity_to_nei
             embeddings.append(all_embeddings[idx])
 
     return embeddings
+
+
+def flatten_tupple(tuple_item):
+    result = []
+    for item in tuple_item:
+        if isinstance(item, tuple):
+            result.extend(flatten_tupple(item))
+        else:
+            result.append(item)
+    return result
+
+
+def save_explanation(path_entity_explanations, len_explanations, explanation_limit, single_expl_dict, expl_type):
+    with open(os.path.join(path_entity_explanations, f'{expl_type}_len{len_explanations}'), 'w') as f:
+        header = ['predict_proba', f'satisfied_{explanation_limit}', 'true_label', 'predicted_label', 'explanation_label', 'explanation_facts', '\n']
+        f.write('\t'.join(header))
+        for key, value in single_expl_dict.items():
+            value_list_of_strs = [str(val) for val in value]
+            key_list_of_strs = []
+            single_line_part0 = '\t'.join(value_list_of_strs)
+            # print(single_line_part0)
+            if isinstance(key, str):
+                single_line_part1 = key
+                # print('\n', single_line_part1)
+            else:
+                single_line_part1 = flatten_tupple(key)
+                single_line_part1 = '\t'.join(single_line_part1)
+                # print(single_line_part1)
+            f.write('\t'.join([single_line_part0, single_line_part1, '\n']))
 
 
 def train_classifier(train_embeddings, train_labels, test_embeddings, test_labels, test_entities, aproximate_model,
@@ -426,10 +455,12 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         dataset_labels = list(zip(test_entities, test_labels))
         path_explanations = os.path.join(current_model_path, 'explanations')
         ensure_dir(path_explanations)
+        path_individual_explanations = os.path.join(path_explanations, 'individual_explanations')
+        ensure_dir(path_individual_explanations)
 
         # compute_effectiveness_kelpie(dataset_labels, path_embedding_classes, entity_to_neighbours_path,
         #                              path_file_model, model_stats_path, path_explanations, max_len_explanations)
-        effectiveness_results = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
+        effectiveness_results, explanations_dicts = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
                                                                   entity_to_neighbours, clf, results_summary,
                                                                   path_explanations, max_len_explanations,
                                                                   explanation_limit, n_jobs)
@@ -442,6 +473,19 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
             json.dump(effectiveness_results[1], f, ensure_ascii = False)
         df = pd.DataFrame([effectiveness_results[1]])
         df.to_csv(os.path.join(path_explanations, f'effectiveness_results_len1.csv'), sep='\t')
+
+        explanations_dict_lenx, explanations_dict_len1 = explanations_dicts
+        for key, [nec_len, suf_len] in explanations_dict_lenx.items():
+            path_entity_explanations = os.path.join(path_individual_explanations, f'{key.split("/")[-1]}')
+            ensure_dir(path_entity_explanations)
+            save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, nec_len, 'necessary')
+            save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, suf_len, 'sufficient')
+
+        for key, [nec_len, suf_len] in explanations_dict_len1.items():
+            path_entity_explanations = os.path.join(path_individual_explanations, f'{key.split("/")[-1]}')
+            len_explanations = 1
+            save_explanation(path_entity_explanations, len_explanations, explanation_limit, nec_len, 'necessary')
+            save_explanation(path_entity_explanations, len_explanations, explanation_limit, suf_len, 'sufficient')
     else:
         effectiveness_results = [False, False]
 
