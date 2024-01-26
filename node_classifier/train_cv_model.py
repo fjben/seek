@@ -78,15 +78,16 @@ def create_save_dirs(model_path, dataset, model_type, current_model_num):
     return current_model_path, current_model_models_path, current_model_models_results_path, current_model_trained_path
 
 
-def ensure_dir(path):
+def ensure_dir(path, option='make_if_not_exists'):
     """
     Check whether the specified path is an existing directory or not. And if is not an existing directory, it creates a new directory.
     :param path: A path-like object representing a file system path.
     """
     # d = os.path.dirname(path)
     d = path
-    if os.path.exists(d): ## temporary for tests
-        shutil.rmtree(d)
+    if option =='overwrite':
+        if os.path.exists(d): ## temporary for tests
+            shutil.rmtree(d)
     if not os.path.exists(d):
         os.makedirs(d)
 
@@ -363,8 +364,12 @@ def flatten_tupple(tuple_item):
 
 
 def save_explanation(path_entity_explanations, len_explanations, explanation_limit, single_expl_dict, expl_type):
-    with open(os.path.join(path_entity_explanations, f'{expl_type}_len{len_explanations}'), 'w') as f:
-        header = ['predict_proba', f'satisfied_{explanation_limit}', 'true_label', 'predicted_label', 'explanation_label', 'explanation_facts', '\n']
+    save_path = os.path.join(path_entity_explanations, f'{expl_type}_len{len_explanations}_{explanation_limit}')
+    ## cannot save tuple keys as json dict
+    # with open(save_path + '.json', 'w', encoding ='utf8') as f: 
+    #     json.dump(single_expl_dict, f, ensure_ascii = False)
+    with open(save_path + '.csv', 'w') as f:
+        header = ['predict_proba', f'satisfied_{explanation_limit}', 'true_label', 'predicted_label', 'explanation_label', 'all_neighbours/explanation_facts', '\n']
         f.write('\t'.join(header))
         for key, value in single_expl_dict.items():
             value_list_of_strs = [str(val) for val in value]
@@ -477,7 +482,7 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         explanations_dict_lenx, explanations_dict_len1 = explanations_dicts
         for key, [nec_len, suf_len] in explanations_dict_lenx.items():
             path_entity_explanations = os.path.join(path_individual_explanations, f'{key.split("/")[-1]}')
-            ensure_dir(path_entity_explanations)
+            ensure_dir(path_entity_explanations, option='make_if_not_exists')
             save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, nec_len, 'necessary')
             save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, suf_len, 'sufficient')
 
@@ -592,16 +597,30 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
     df = pd.DataFrame([global_results])
     df.to_csv(os.path.join(model_path, f'global_results_{model_type}.csv'), sep='\t')
 
-    if all_effectiveness_results[0] and all_effectiveness_results[1]:
+    # if all_effectiveness_results[0] and all_effectiveness_results[1]:
+    #     with open(os.path.join(model_path, f'global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_{model_type}.json'), 'w', encoding ='utf8') as f: 
+    #         json.dump(global_effectiveness_results_lenx, f, ensure_ascii = False)
+    #     with open(os.path.join(model_path, f'global_effectiveness_results_len1_{explanation_limit}_{model_type}.json'), 'w', encoding ='utf8') as f: 
+    #         json.dump(global_effectiveness_results_len1, f, ensure_ascii = False)
+    #     df = pd.DataFrame([global_effectiveness_results_lenx])
+    #     df.to_csv(os.path.join(model_path, f'global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_{model_type}.csv'), sep='\t')
+    #     df = pd.DataFrame([global_effectiveness_results_len1])
+    #     df.to_csv(os.path.join(model_path, f'global_effectiveness_results_len1_{explanation_limit}_{model_type}.csv'), sep='\t')
+
+    if all_effectiveness_results[0]:
+        df = pd.DataFrame(all_effectiveness_results[0])
+        df.to_csv(os.path.join(model_path, f'all_effectiveness_results_len{max_len_explanations}_{explanation_limit}_{model_type}.csv'), sep='\t')
         with open(os.path.join(model_path, f'global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_{model_type}.json'), 'w', encoding ='utf8') as f: 
             json.dump(global_effectiveness_results_lenx, f, ensure_ascii = False)
-        with open(os.path.join(model_path, f'global_effectiveness_results_len1_{explanation_limit}_{model_type}.json'), 'w', encoding ='utf8') as f: 
-            json.dump(global_effectiveness_results_len1, f, ensure_ascii = False)
         df = pd.DataFrame([global_effectiveness_results_lenx])
         df.to_csv(os.path.join(model_path, f'global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_{model_type}.csv'), sep='\t')
+    if all_effectiveness_results[1]:
+        df = pd.DataFrame(all_effectiveness_results[1])
+        df.to_csv(os.path.join(model_path, f'all_effectiveness_results_len1_{explanation_limit}_{model_type}.csv'), sep='\t')
+        with open(os.path.join(model_path, f'global_effectiveness_results_len1_{explanation_limit}_{model_type}.json'), 'w', encoding ='utf8') as f: 
+            json.dump(global_effectiveness_results_len1, f, ensure_ascii = False)
         df = pd.DataFrame([global_effectiveness_results_len1])
         df.to_csv(os.path.join(model_path, f'global_effectiveness_results_len1_{explanation_limit}_{model_type}.csv'), sep='\t')
-
 
 
 explanation_limit='threshold'

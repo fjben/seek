@@ -6,10 +6,10 @@ import pandas as pd
 
 ############################################################################### arguments
 
-# dataset = 'AIFB'
+dataset = 'AIFB'
 # dataset = 'MUTAG'
 # dataset = 'AM_FROM_DGL'
-dataset = 'MDGENRE'
+# dataset = 'MDGENRE'
 
 
 ############################################################################### functions
