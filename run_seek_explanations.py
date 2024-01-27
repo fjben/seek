@@ -706,7 +706,7 @@ def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original
     else:
         raise Exception('must have a explan_type of explanation')
 
-    return explanation_found, current_best_neighbours, candidate_neighbours_results
+    return explanation_found, current_best_neighbours, current_best_explanation, candidate_neighbours_results
 
 
 ## necessary (backward)
@@ -721,6 +721,7 @@ def wrapper_method_for_explanation_selection(
     
     current_neighbours_in_explanation = set()
     candidate_neighbours = set(all_neighbours)
+    path_to_best_explanation = []
     explan_len1 = True
     while candidate_neighbours:
         # print('here')
@@ -729,11 +730,13 @@ def wrapper_method_for_explanation_selection(
 
         explanation_found, \
         current_neighbours_in_explanation, \
+        current_best_explanation, \
         current_explan = compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original,
                                                     pred_proba_predicted_class_original, threshold, dic_emb_classes,
                                                     n_embeddings, all_neighbours,
                                                     current_neighbours_in_explanation, candidate_neighbours,
                                                     explan_type=explan_type, entity=entity)
+        path_to_best_explanation.append(current_best_explanation)
         wrapper_explan.update(current_explan)
         if explan_len1:
             wrapper_explan_len1.update(current_explan)
@@ -809,7 +812,7 @@ def wrapper_method_for_explanation_selection(
     # print('and here')
     # print(wrapper_explan)
 
-    return wrapper_explan, wrapper_explan_len1 # , wrapper_explan_numbers
+    return wrapper_explan, wrapper_explan_len1, path_to_best_explanation # , wrapper_explan_numbers
 
 
 def compute_nec_suf_delta(met, test_labels, predictions, predictions_necessary, predictions_sufficient, average_type=''):
@@ -1039,14 +1042,14 @@ def explain(input_data): ## can remove label is not doing nothing here
     
     # print('\n', entity, '\n')
 
-    necessary_explan, necessary_explan_len1 = wrapper_method_for_explanation_selection(
+    necessary_explan, necessary_explan_len1, necessary_path_to_best_explanation = wrapper_method_for_explanation_selection(
         ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
         n_embeddings, all_neighbours, max_len_explanations, explan_type='necessary', entity=entity)
     
     # print('here nec')
     # print(necessary_explan)
     
-    sufficient_explan, sufficient_explan_len1 = wrapper_method_for_explanation_selection(
+    sufficient_explan, sufficient_explan_len1, sufficient_path_to_best_explanation = wrapper_method_for_explanation_selection(
         ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
         n_embeddings, all_neighbours, max_len_explanations, explan_type='sufficient', entity=entity)
     
@@ -1148,7 +1151,7 @@ def explain(input_data): ## can remove label is not doing nothing here
     explain_entity_time = toc - tic
 
     # return label, pred_original, pred_withoutnecessary, pred_withsufficient, pred_withoutnecessary_len1, pred_withsufficient_len1
-    return necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict, explain_entity_time
+    return necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict, necessary_path_to_best_explanation, sufficient_path_to_best_explanation, explain_entity_time
 
 def pool_handler(pool_size, input_data):
     with Pool(pool_size) as p:
@@ -1225,6 +1228,8 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
     original_pred_eva = []
     explanations_dict_lenx = dict()
     explanations_dict_len1 = dict()
+    necessary_paths_best_expl_dict = dict()
+    sufficient_paths_best_expl_dict = dict()
     explain_stats = defaultdict(list)
 
     if multiproc:
@@ -1261,7 +1266,7 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
 
         for entity, label, item in zip(entities, labels, res):
             necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict, \
-                explain_entity_time = item
+                necessary_path_to_best_explanation, sufficient_path_to_best_explanation, explain_entity_time = item
 
             dicts_to_add_label_info = [necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict]
             for dict_to_add_lab_info in dicts_to_add_label_info:
@@ -1290,6 +1295,9 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
 
             explanations_dict_lenx[entity] = [necessary_explan_dict, sufficient_explan_dict]
             explanations_dict_len1[entity] = [necessary_explan_len1_dict, sufficient_explan_len1_dict]
+
+            necessary_paths_best_expl_dict[entity] = necessary_path_to_best_explanation
+            sufficient_paths_best_expl_dict[entity] = sufficient_path_to_best_explanation
 
             explain_stats['entities'].append(entity)
             explain_stats['explain_times'].append(explain_entity_time)
@@ -1326,7 +1334,10 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
             necessary_explan_dict, \
             necessary_explan_len1_dict, \
             sufficient_explan_dict, \
-            sufficient_explan_len1_dict = explain(input_data)
+            sufficient_explan_len1_dict, \
+            necessary_path_to_best_explanation, \
+            sufficient_path_to_best_explanation, \
+            explain_entity_time = explain(input_data)
 
             dicts_to_add_label_info = [necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict]
             for dict_to_add_lab_info in dicts_to_add_label_info:
@@ -1361,6 +1372,9 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
 
             explanations_dict_lenx[entity] = [necessary_explan_dict, sufficient_explan_dict]
             explanations_dict_len1[entity] = [necessary_explan_len1_dict, sufficient_explan_len1_dict]
+
+            necessary_paths_best_expl_dict[entity] = necessary_path_to_best_explanation
+            sufficient_paths_best_expl_dict[entity] = sufficient_path_to_best_explanation
 
             # print(list(necessary_explan_dict.values())[1][4], '\n')
             # print(list(necessary_explan_dict.values())[1])
@@ -1434,7 +1448,9 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
     #     file_output.write('DeltaSufficient\t' + str(waf_suf - original_waf_suf) + '\t' + str(pr_suf - original_pr_suf) + '\t' + str(re_suf - original_re_suf) + '\n')
     
     return [effectiveness_results_lenx, effectiveness_results_len1], \
-        [explanations_dict_lenx, explanations_dict_len1], explain_stats
+           [explanations_dict_lenx, explanations_dict_len1], \
+           [necessary_paths_best_expl_dict, sufficient_paths_best_expl_dict], \
+            explain_stats
 
 if __name__== '__main__':
 

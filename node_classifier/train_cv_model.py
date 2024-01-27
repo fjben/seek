@@ -289,7 +289,7 @@ with open(path_embedding_classes, 'r') as f:
 def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                          train_index_files_designation, test_index_files_designation,
                          aproximate_model, RANDOM_STATE, max_len_explanations, explanation_limit, n_jobs,
-                         n_partitions):
+                         n_partitions, overwrite_invidivual_explanations=False):
     
     all_results_summary = []
     all_effectiveness_results_lenx = []
@@ -328,7 +328,8 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
                                                                        test_labels, test_entities, aproximate_model,
                                                                        entity_to_neighbours, dic_emb_classes,
                                                                        max_len_explanations, explanation_limit,
-                                                                       current_model_path, n_jobs, RANDOM_STATE)
+                                                                       current_model_path, n_jobs, RANDOM_STATE, 
+                                                                       overwrite_invidivual_explanations=overwrite_invidivual_explanations)
 
         save_model_results(dataset, clf, current_model_models_path, current_model_models_results_path, current_model_trained_path,
              results_summary)
@@ -379,8 +380,19 @@ def flatten_tupple(tuple_item):
     return result
 
 
-def save_explanation(path_entity_explanations, len_explanations, explanation_limit, single_expl_dict, expl_type):
+def save_explanation(path_entity_explanations, len_explanations, explanation_limit, single_expl_dict, expl_path_info,
+                     expl_type):
     save_path = os.path.join(path_entity_explanations, f'{expl_type}_len{len_explanations}_{explanation_limit}')
+    save_path_expl_path = save_path + '_feature_selection_order'
+
+    # print('\n')
+    # print(key)
+    # print('nec_len')
+    # print(single_expl_dict)
+    # print('necessary_path_to_best_explanation')
+    # print(expl_path)
+    # print('\n')
+    
     ## cannot save tuple keys as json dict
     # with open(save_path + '.json', 'w', encoding ='utf8') as f: 
     #     json.dump(single_expl_dict, f, ensure_ascii = False)
@@ -401,10 +413,31 @@ def save_explanation(path_entity_explanations, len_explanations, explanation_lim
                 # print(single_line_part1)
             f.write('\t'.join([single_line_part0, single_line_part1, '\n']))
 
+    if expl_path_info:
+        with open(save_path_expl_path + '.csv', 'w') as f:
+            header = ['predict_proba', f'satisfied_{explanation_limit}', 'explanation_label', 'explanation_facts', '\n']
+            f.write('\t'.join(header))
+            # for key, value in expl_path_info.items():
+            for explanation in expl_path_info:
+                # print(explanation)
+                value_list_of_strs = [str(val) for val in explanation[1]]
+                key_list_of_strs = []
+                single_line_part0 = '\t'.join(value_list_of_strs)
+                # print(single_line_part0)
+                if isinstance(explanation[0], str):
+                    single_line_part1 = key
+                    # print('\n', single_line_part1)
+                else:
+                    single_line_part1 = flatten_tupple(explanation[0])
+                    single_line_part1 = '\t'.join(single_line_part1)
+                    # print(single_line_part1)
+                f.write('\t'.join([single_line_part0, single_line_part1, '\n']))
+
 
 def train_classifier(train_embeddings, train_labels, test_embeddings, test_labels, test_entities, aproximate_model,
                      entity_to_neighbours, dic_emb_classes, max_len_explanations, explanation_limit,
-                     current_model_path, n_jobs, RANDOM_STATE):
+                     current_model_path, n_jobs, RANDOM_STATE, overwrite_invidivual_explanations=False):
+    
     # Fit a Support Vector Machine on train embeddings and pick the best
     # C-parameters (regularization strength).
     param_grid = {"max_depth": [2, 4, 6, 8, 10]}
@@ -475,16 +508,22 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
     if aproximate_model:
         dataset_labels = list(zip(test_entities, test_labels))
         path_explanations = os.path.join(current_model_path, 'explanations')
-        ensure_dir(path_explanations, option='make_if_not_exists')
         path_individual_explanations = os.path.join(path_explanations, 'individual_explanations')
-        ensure_dir(path_individual_explanations, option='make_if_not_exists')
+        if overwrite_invidivual_explanations:
+            ensure_dir(path_explanations, option='overwrite')
+            ensure_dir(path_individual_explanations, option='overwrite')
+        else:
+            ensure_dir(path_explanations, option='make_if_not_exists')
+            ensure_dir(path_individual_explanations, option='make_if_not_exists')
 
         # compute_effectiveness_kelpie(dataset_labels, path_embedding_classes, entity_to_neighbours_path,
         #                              path_file_model, model_stats_path, path_explanations, max_len_explanations)
-        effectiveness_results, explanations_dicts, explain_stats = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
-                                                                  entity_to_neighbours, clf, results_summary,
-                                                                  path_explanations, max_len_explanations,
-                                                                  explanation_limit, n_jobs)
+        effectiveness_results, \
+        explanations_dicts, \
+        paths_to_explanations, \
+        explain_stats = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf,
+                                                     results_summary, path_explanations, max_len_explanations,
+                                                     explanation_limit, n_jobs)
         
         with open(os.path.join(path_explanations, f'effectiveness_results_len{max_len_explanations}.json'), 'w', encoding ='utf8') as f: 
             json.dump(effectiveness_results[0], f, ensure_ascii = False)
@@ -495,19 +534,25 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         df = pd.DataFrame([effectiveness_results[1]])
         df.to_csv(os.path.join(path_explanations, f'effectiveness_results_len1.csv'), sep='\t')
 
+        necessary_paths_best_expl_dict, sufficient_paths_best_expl_dict = paths_to_explanations
+        # print('\n\n\n\n\nhere')
         explanations_dict_lenx, explanations_dict_len1 = explanations_dicts
         for key, [nec_len, suf_len] in explanations_dict_lenx.items():
+            necessary_path = necessary_paths_best_expl_dict[key]
+            sufficient_path = sufficient_paths_best_expl_dict[key]
             path_entity_explanations = os.path.join(path_individual_explanations, f'{key.split("/")[-1]}')
+            # print(path_entity_explanations)
             ensure_dir(path_entity_explanations, option='make_if_not_exists')
-            save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, nec_len, 'necessary')
-            save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, suf_len, 'sufficient')
+            save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, nec_len, necessary_path, 'necessary')
+            save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, suf_len, sufficient_path, 'sufficient')
+
 
         for key, [nec_len, suf_len] in explanations_dict_len1.items():
             path_entity_explanations = os.path.join(path_individual_explanations, f'{key.split("/")[-1]}')
             ensure_dir(path_entity_explanations, option='make_if_not_exists')
             len_explanations = 1
-            save_explanation(path_entity_explanations, len_explanations, explanation_limit, nec_len, 'necessary')
-            save_explanation(path_entity_explanations, len_explanations, explanation_limit, suf_len, 'sufficient')
+            save_explanation(path_entity_explanations, len_explanations, explanation_limit, nec_len, None, 'necessary')
+            save_explanation(path_entity_explanations, len_explanations, explanation_limit, suf_len, None, 'sufficient')
     else:
         effectiveness_results = [False, False]
         explain_stats = False
@@ -677,7 +722,7 @@ explanation_limit='threshold'
 aproximate_model = True
 all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
-                     max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits)
+                     max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits, overwrite_invidivual_explanations=True)
 
 save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
@@ -686,7 +731,7 @@ explanation_limit='class_change'
 aproximate_model = True
 all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
-                     max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits)
+                     max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits, overwrite_invidivual_explanations=False)
 
 save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
