@@ -151,13 +151,35 @@ d = np.around(original_accuracy_scores - necessary_accuracy_scores, decimals=3)
 ## 'greater': the distribution underlying ``d`` is stochastically greater than a distribution symmetric about zero.
 ## I think this means that it will check if the original is higher than the other which is what we want
 # res = wilcoxon(d, alternative='greater')
-print('original_accuracy_scores')
-print(original_accuracy_scores)
-print('necessary_accuracy_scores')
-print(necessary_accuracy_scores)
+# print('original_accuracy_scores')
+# print(original_accuracy_scores)
+# print('necessary_accuracy_scores')
+# print(necessary_accuracy_scores)
 
 res = wilcoxon(original_accuracy_scores, necessary_accuracy_scores, alternative='greater')
 print('\n', res)
+
+# res = wilcoxon(original_accuracy_scores, sufficient_accuracy_scores, alternative='greater')
+
+if np.sum(original_accuracy_scores - sufficient_accuracy_scores) == 0:
+    ## ValueError: zero_method 'wilcox' and 'pratt' do not work if x - y is zero for all elements.
+    res = '∀ elem i, x[i]-y[i] = 0'
+    print('\n', res)
+else:
+    res = wilcoxon(original_accuracy_scores, sufficient_accuracy_scores, alternative='greater')
+    print('\n', res)
+
+# try:
+#     res = wilcoxon(original_accuracy_scores, sufficient_accuracy_scores, alternative='greater')
+# except ValueError:
+#     print('here')
+#     if np.sum(original_accuracy_scores - necessary_accuracy_scores) == 0:
+#         print('here')
+#         res = 'x-y = 0'
+#         print('\n', res)
+
+
+
 
 max_len_explanations = 5
 explanation_limit = 'threshold'
