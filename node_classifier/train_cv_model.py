@@ -475,9 +475,9 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
     if aproximate_model:
         dataset_labels = list(zip(test_entities, test_labels))
         path_explanations = os.path.join(current_model_path, 'explanations')
-        ensure_dir(path_explanations)
+        ensure_dir(path_explanations, option='make_if_not_exists')
         path_individual_explanations = os.path.join(path_explanations, 'individual_explanations')
-        ensure_dir(path_individual_explanations)
+        ensure_dir(path_individual_explanations, option='make_if_not_exists')
 
         # compute_effectiveness_kelpie(dataset_labels, path_embedding_classes, entity_to_neighbours_path,
         #                              path_file_model, model_stats_path, path_explanations, max_len_explanations)
@@ -656,8 +656,8 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
         df.to_csv(os.path.join(model_path, f'global_effectiveness_results_len1_{explanation_limit}_{model_type}.csv'), sep='\t')
     if all_effectiveness_results[0] or all_effectiveness_results[1]:
         df = pd.DataFrame([global_explain_stats])
-        df.to_csv(os.path.join(model_path, f'global_explain_stats.csv'), sep='\t')
-        with open(os.path.join(model_path, f'global_explain_stats.json'), 'w', encoding ='utf8') as f: 
+        df.to_csv(os.path.join(model_path, f'global_explain_stats_{explanation_limit}.csv'), sep='\t')
+        with open(os.path.join(model_path, f'global_explain_stats_{explanation_limit}.json'), 'w', encoding ='utf8') as f: 
             json.dump(global_explain_stats, f, ensure_ascii = False)
 
     return global_results
