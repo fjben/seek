@@ -1,6 +1,10 @@
+import argparse
 import json
+import os
 
 from collections import OrderedDict
+
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -10,7 +14,20 @@ from scipy.stats import wilcoxon
 
 ############################################################################### arguments
 
-dataset = 'AIFB'
+parser = argparse.ArgumentParser(description="description")
+parser.add_argument("--dataset",
+                    type=str,
+                    choices=['AIFB', 'MUTAG', 'AM_FROM_DGL', 'MDGENRE'],
+                    help="help")
+parser.add_argument("--kge_model",
+                    type=str,
+                    choices=['RDF2Vec', 'ComplEx', 'distMult', 'TransE', 'TransH'],
+                    help="help")
+args = parser.parse_args()
+dataset = args.dataset
+kge_model = args.kge_model
+
+# dataset = 'AIFB'
 # dataset = 'MUTAG'
 # dataset = 'AM_FROM_DGL'
 # dataset = 'MDGENRE'
@@ -18,8 +35,22 @@ dataset = 'AIFB'
 
 ############################################################################### functions
 
+def ensure_dir(path, option='make_if_not_exists'):
+    """
+    Check whether the specified path is an existing directory or not. And if is not an existing directory, it creates a new directory.
+    :param path: A path-like object representing a file system path.
+    """
+    # d = os.path.dirname(path)
+    d = path
+    if option =='overwrite':
+        if os.path.exists(d): ## temporary for tests
+            shutil.rmtree(d)
+    if not os.path.exists(d):
+        os.makedirs(d)
+
+
 def create_df_from_global_effectiveness_results(dataset, max_len_explanations, explanation_limit):
-    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}/global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN'
+    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}_{kge_model}/global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN'
     
     # with open(load_path + '.json', 'r') as f:
     #     results = json.load(f)
@@ -124,7 +155,7 @@ def create_df_from_global_effectiveness_results(dataset, max_len_explanations, e
 
 
 def create_df_from_all_effectiveness_results(dataset, max_len_explanations, explanation_limit):
-    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}/all_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN'
+    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}_{kge_model}/all_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN'
     
     # with open(load_path + '.json', 'r') as f:
     #     results = json.load(f)
@@ -187,7 +218,7 @@ def create_df_from_all_effectiveness_results(dataset, max_len_explanations, expl
 
 
 def create_df_from_global_classifier_results(dataset, model_type):
-    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}/global_results_{model_type}'
+    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}_{kge_model}/global_results_{model_type}'
     
     # with open(load_path + '.json', 'r') as f:
     #     results = json.load(f)
@@ -236,7 +267,7 @@ def create_df_from_global_classifier_results(dataset, model_type):
 
 
 def create_df_from_classifier_results(dataset, model_type):
-    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}/all_results_{model_type}'
+    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}_{kge_model}/all_results_{model_type}'
     
     # with open(load_path + '.json', 'r') as f:
     #     results = json.load(f)
@@ -288,59 +319,90 @@ def wilcoxon_test(original_scores, necessary_scores, sufficient_scores):
     return results
 
 
+def create_final_effectiveness_results(dataset, max_len_explanations, explanation_limit):
+    df_final = create_df_from_global_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations,
+                                                           explanation_limit=explanation_limit)
+    # print('\n', df_final)
+    # df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
+
+    accuracy_labels = ['original_accuracy_score_', 'necessary_accuracy_score_', 'sufficient_accuracy_score_']
+    f1_weighted_labels = ['original_f1_score_weighted', 'necessary_f1_score_weighted', 'sufficient_f1_score_weighted']
+    precision_weighted_labels = ['original_precision_score_weighted', 'necessary_precision_score_weighted', 'sufficient_precision_score_weighted',]
+    recall_weighted_labels = ['original_recall_score_weighted', 'necessary_recall_score_weighted', 'sufficient_recall_score_weighted',]
+
+
+    df_effectiveness_stats_tests = create_df_from_all_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations, explanation_limit=explanation_limit)
+    all_stats_tests_results = OrderedDict()
+    for met_labels in [accuracy_labels, f1_weighted_labels, precision_weighted_labels, recall_weighted_labels]:
+        original_scores_label, necessary_scores_label, sufficient_scores_label = met_labels
+        description = f'{original_scores_label.split("_")[1]} p-values'
+        original_scores = np.array(df_effectiveness_stats_tests[original_scores_label])
+        necessary_scores = np.array(df_effectiveness_stats_tests[necessary_scores_label])
+        sufficient_scores = np.array(df_effectiveness_stats_tests[sufficient_scores_label])
+
+        # print('\n')
+        # print(original_scores_label)
+        # print(original_scores)
+        # print(necessary_scores)
+        # # print(sufficient_scores)
+        # print('\n')
+        [necessary_p_value, sufficient_p_value] = wilcoxon_test(original_scores, necessary_scores, sufficient_scores)
+        all_stats_tests_results[description] = {'necessary_p_value': necessary_p_value,
+                                                'sufficient_p_value': sufficient_p_value}
+
+
+    # print(all_stats_tests_results)
+
+    for score_metric in all_stats_tests_results.keys():
+        all_stats_tests_results[score_metric]['necessary_p_value']
+        new_col = ['',
+                '',
+                all_stats_tests_results[score_metric]['necessary_p_value'],
+                '',
+                '',
+                all_stats_tests_results[score_metric]['sufficient_p_value'],
+                ''
+                ]
+        df_final[f'{score_metric}'] = new_col
+
+    return df_final
+
+
 ############################################################################### script
+
+save_path = f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}_{kge_model}'
+ensure_dir(save_path, option='overwrite')
     
-accuracy_labels = ['original_accuracy_score_', 'necessary_accuracy_score_', 'sufficient_accuracy_score_']
-f1_weighted_labels = ['original_f1_score_weighted', 'necessary_f1_score_weighted', 'sufficient_f1_score_weighted']
-precision_weighted_labels = ['original_precision_score_weighted', 'necessary_precision_score_weighted', 'sufficient_precision_score_weighted',]
-recall_weighted_labels = ['original_recall_score_weighted', 'necessary_recall_score_weighted', 'sufficient_recall_score_weighted',]
+max_len_explanations = 1
+explanation_limit = 'threshold'
+df_final = create_final_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations,
+                                       explanation_limit=explanation_limit)
+print('\n', df_final)
+df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}_{kge_model}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
+
+
+max_len_explanations = 5
+explanation_limit = 'threshold'
+df_final = create_final_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations,
+                                       explanation_limit=explanation_limit)
+print('\n', df_final)
+df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}_{kge_model}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
 
 
 max_len_explanations = 1
-explanation_limit = 'threshold'
-df_final = create_df_from_global_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations, explanation_limit=explanation_limit)
-# print('\n', df_final)
-# df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
-
-
-df_effectiveness_stats_tests = create_df_from_all_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations, explanation_limit=explanation_limit)
-all_stats_tests_results = OrderedDict()
-for met_labels in [accuracy_labels, f1_weighted_labels, precision_weighted_labels, recall_weighted_labels]:
-    original_scores_label, necessary_scores_label, sufficient_scores_label = met_labels
-    description = f'{original_scores_label.split("_")[1]} p-values'
-    original_scores = np.array(df_effectiveness_stats_tests[original_scores_label])
-    necessary_scores = np.array(df_effectiveness_stats_tests[necessary_scores_label])
-    sufficient_scores = np.array(df_effectiveness_stats_tests[sufficient_scores_label])
-
-    # print('\n')
-    # print(original_scores_label)
-    # print(original_scores)
-    # print(necessary_scores)
-    # # print(sufficient_scores)
-    # print('\n')
-    [necessary_p_value, sufficient_p_value] = wilcoxon_test(original_scores, necessary_scores, sufficient_scores)
-    all_stats_tests_results[description] = {'necessary_p_value': necessary_p_value,
-                                            'sufficient_p_value': sufficient_p_value}
-
-
-# print(all_stats_tests_results)
-
-for score_metric in all_stats_tests_results.keys():
-    all_stats_tests_results[score_metric]['necessary_p_value']
-    new_col = ['',
-               '',
-               all_stats_tests_results[score_metric]['necessary_p_value'],
-               '',
-               '',
-               all_stats_tests_results[score_metric]['sufficient_p_value'],
-               ''
-               ]
-    df_final[f'{score_metric}'] = new_col
-
+explanation_limit = 'class_change'
+df_final = create_final_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations,
+                                       explanation_limit=explanation_limit)
 print('\n', df_final)
-df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
+df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}_{kge_model}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
 
-    
+
+max_len_explanations = 5
+explanation_limit = 'class_change'
+df_final = create_final_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations,
+                                       explanation_limit=explanation_limit)
+print('\n', df_final)
+df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}_{kge_model}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
 
 
 # max_len_explanations = 5
@@ -367,13 +429,13 @@ df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{da
 ## be careful because model type is name if dataframe manually
 model_type = 'RO'
 df_final_RO = create_df_from_global_classifier_results(dataset=dataset, model_type='RO')
-print('\n', df_final_RO)
-df_final_RO.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_results_{model_type}.csv', index=False, sep='\t')
+# print('\n', df_final_RO)
+# df_final_RO.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_results_{model_type}.csv', index=False, sep='\t')
 
 model_type = 'RAN'
 df_final_RAN = create_df_from_global_classifier_results(dataset=dataset, model_type='RAN')
-print('\n', df_final_RAN)
-df_final_RAN.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_results_{model_type}.csv', index=False, sep='\t')
+# print('\n', df_final_RAN)
+# df_final_RAN.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_results_{model_type}.csv', index=False, sep='\t')
 
 
 
@@ -394,8 +456,8 @@ for column in df_RO.columns:
         # print(df_RO[column].values)
         res = wilcoxon(df_RO[column].values, df_RAN[column].values) #, alternative='greater')
         # print('RESULTS', res)
-        # results.append("{:.2e}".format(res[1]))
-        results.append(res[1])
+        results.append("{:.2e}".format(res[1]))
+        # results.append(res[1])
 print(results)
 
 df_final_RO_RAN = pd.concat([df_final_RO, df_final_RAN])
@@ -403,7 +465,10 @@ df_final_RO_RAN = pd.concat([df_final_RO, df_final_RAN])
 df_final_RO_RAN.loc[len(df_final_RO_RAN)] = results
 # df_final_RO_RAN = df_final_RO_RAN.append(results, ignore_index=True)
 
+indexes_names = ['entities model', 'all neighb model', 'p-value']
+df_final_RO_RAN = df_final_RO_RAN.set_index([indexes_names])
 print(df_final_RO_RAN)
+df_final_RO_RAN.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}_{kge_model}/processed_global_results_RO_RAN.csv', index=True, sep='\t')
 
 
 
