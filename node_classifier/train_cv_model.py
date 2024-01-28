@@ -38,9 +38,14 @@ parser = argparse.ArgumentParser(description="description")
 parser.add_argument("--dataset",
                     type=str,
                     choices=['AIFB', 'MUTAG', 'AM_FROM_DGL', 'MDGENRE'],
-                    help="The dataset to use: FB15k, FB15k-237, WN18, WN18RR or YAGO3-10")
+                    help="help")
+parser.add_argument("--kge_model",
+                    type=str,
+                    choices=['RDF2Vec', 'ComplEx', 'distMult', 'TransE', 'TransH'],
+                    help="help")
 args = parser.parse_args()
 dataset = args.dataset
+kge_model = args.kge_model
 
 # max_len_explanations=1
 max_len_explanations=5
@@ -209,10 +214,14 @@ def stats_for_preds(predictions_proba):
 cpu_num = cpu_count()
 
 data_path = f'node_classifier/data/{dataset}'
-model_path = f'node_classifier/cv_model/{dataset}'
-transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
+model_path = f'node_classifier/cv_model/{dataset}_{kge_model}'
+if kge_model == 'RDF2Vec':
+    transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
 entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/entity_to_neighbours.json'
-path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/neighbours_embeddings.json'
+if kge_model == 'RDF2Vec':
+    path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/neighbours_embeddings.json'
+elif kge_model in ['ComplEx', 'distMult', 'TransE', 'TransH']:
+    path_embedding_classes = f'Embeddings/node_classification/{kge_model}/{dataset}_{kge_model}_100.json'
 # transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/models/RDF2Vec_{dataset}'
 # entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/trained/entity_to_neighbours.json'
 # path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/trained/neighbours_embeddings.json'
@@ -276,9 +285,17 @@ print("Number of used cpu:\t", n_jobs, '\n')
 train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_path, n_splits, RANDOM_STATE)
 
 ## I don't think I need this, I can load this information using the /trained data directly from the dict
-transformer = RDF2VecTransformer().load(transformer_model_path)
-all_embeddings = transformer._embeddings
-all_entities = transformer._entities
+if kge_model == 'RDF2Vec':
+    transformer = RDF2VecTransformer().load(transformer_model_path)
+    all_embeddings = transformer._embeddings
+    all_entities = transformer._entities
+elif kge_model in ['ComplEx', 'distMult', 'TransE', 'TransH']:
+    with open(entity_to_neighbours_path, 'r') as f:
+        entity_to_neighbours = json.load(f)
+    with open(path_embedding_classes, 'r') as f:
+        dic_emb_classes = json.load(f)
+    all_embeddings = list(dic_emb_classes.values())
+    all_entities = list(dic_emb_classes.keys())
 
 with open(entity_to_neighbours_path, 'r') as f:
     entity_to_neighbours = json.load(f)
