@@ -2,7 +2,7 @@
 
 set -e
 
-python3 node_classifier/define_reproducibility_parameters.py
+# python3 node_classifier/define_reproducibility_parameters.py
 
 reproducibility_parameters_file='node_classifier/tmp/reproducibility_parameters.txt'
 nr_lines=$(wc -l < $reproducibility_parameters_file)
@@ -35,7 +35,7 @@ kge_models=(
     'TransH'
 )
 
-for DATASET in 'AIFB' ## 'MUTAG' 'AM_FROM_DGL' 'MDGENRE'
+for DATASET in 'MUTAG' 'AM_FROM_DGL' 'MDGENRE' ## 'AIFB'
 # for DATASET in "${datasets}"
 do
     for KGE_MODEL in 'RDF2Vec' ## 'ComplEx' 'distMult' 'TransE' 'TransH'
@@ -45,4 +45,4 @@ do
     done
 done
 
-rm node_classifier/tmp/reproducibility_parameters.txt
+# rm node_classifier/tmp/reproducibility_parameters.txt

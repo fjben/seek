@@ -128,7 +128,8 @@ def process_indexes_partition(file_partition):
 def run_partition(entities, labels, filename_output, n_splits, random_state):
     index_partition = 0
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
-    data_partitions_path = os.path.join(filename_output, 'data_partitions')
+    # data_partitions_path = os.path.join(filename_output, 'data_partitions')
+    data_partitions_path = os.path.join(filename_output)
     ensure_dir(data_partitions_path, option='overwrite')
     train_index_files_designation = os.path.join(data_partitions_path, 'Indexes_crossvalidationTrain_Run')
     test_index_files_designation = os.path.join(data_partitions_path, 'Indexes_crossvalidationTest_Run')
@@ -222,7 +223,7 @@ cpu_num = cpu_count()
 
 data_path = f'node_classifier/data/{dataset}'
 model_path = f'node_classifier/cv_model/{dataset}_{kge_model}'
-model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}'
+model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions'
 if kge_model == 'RDF2Vec':
     transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
 entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/entity_to_neighbours.json'
@@ -302,8 +303,9 @@ print("Number of used cpu:\t", n_jobs, '\n')
 if not os.listdir(model_data_partitions_path):
     train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_data_partitions_path, n_splits, RANDOM_STATE)
 else:
-    train_index_files_designation = os.path.join(model_data_partitions_path, 'data_partitions/Indexes_crossvalidationTrain_Run')
-    test_index_files_designation = os.path.join(model_data_partitions_path, 'data_partitions/Indexes_crossvalidationTest_Run')
+    ensure_dir(model_data_partitions_path, 'make_if_not_exists')
+    train_index_files_designation = os.path.join(model_data_partitions_path, 'Indexes_crossvalidationTrain_Run')
+    test_index_files_designation = os.path.join(model_data_partitions_path, 'Indexes_crossvalidationTest_Run')
 
 ## I don't think I need this, I can load this information using the /trained data directly from the dict
 if kge_model == 'RDF2Vec':
@@ -762,25 +764,25 @@ all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_va
 
 save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
-# explanation_limit='threshold'
+explanation_limit='threshold'
 
-# aproximate_model = True
-# all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
-#                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
-#                      max_len_explanations, explanation_limit, n_jobs,
-#                      n_partitions=n_splits, overwrite_invidivual_explanations=True)
+aproximate_model = True
+all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+                     train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
+                     max_len_explanations, explanation_limit, n_jobs,
+                     n_partitions=n_splits, overwrite_invidivual_explanations=True)
 
-# save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
-# explanation_limit='class_change'
+explanation_limit='class_change'
 
-# aproximate_model = True
-# all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
-#                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
-#                      max_len_explanations, explanation_limit, n_jobs,
-#                      n_partitions=n_splits, overwrite_invidivual_explanations=False)
+aproximate_model = True
+all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+                     train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
+                     max_len_explanations, explanation_limit, n_jobs,
+                     n_partitions=n_splits, overwrite_invidivual_explanations=False)
 
-# save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
 toc_total_script_time = time.perf_counter()
 print(f"\nTotal script time in ({toc_total_script_time - tic_total_script_time:0.4f}s)\n")
