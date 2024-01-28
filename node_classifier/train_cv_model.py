@@ -43,9 +43,16 @@ parser.add_argument("--kge_model",
                     type=str,
                     choices=['RDF2Vec', 'ComplEx', 'distMult', 'TransE', 'TransH'],
                     help="help")
+parser.add_argument("--keep_seeds_for_running_multiple_cv_models",
+                    action="store_true",
+                    help="help.")
 args = parser.parse_args()
 dataset = args.dataset
 kge_model = args.kge_model
+keep_seeds_for_running_multiple_cv_models = args.keep_seeds_for_running_multiple_cv_models
+
+# print(keep_seeds_for_running_multiple_cv_models)
+# raise
 
 # max_len_explanations=1
 max_len_explanations=5
@@ -139,9 +146,9 @@ def run_partition(entities, labels, filename_output, n_splits, random_state):
     return train_index_files_designation, test_index_files_designation
 
 
-def setup_random_seeds(current_model_models_path, cpu_num):
+def setup_random_seeds(model_path, cpu_num):
     try:
-        with open(os.path.join(current_model_models_path, 'reproducibility_parameters.txt')) as f:
+        with open(os.path.join(model_path, 'reproducibility_parameters.txt')) as f:
             lines = f.readlines()
         RANDOM_STATE = int(lines[5])
         workers = int(lines[7])
@@ -273,6 +280,13 @@ skip_predicates = set(ds_metadata['skip_predicates'])
 #             max_depth=2
 #             max_walks=500
 
+ensure_dir(model_path)
+
+if keep_seeds_for_running_multiple_cv_models:
+    shutil.copy('node_classifier/tmp/reproducibility_parameters.txt', os.path.join(model_path, 'reproducibility_parameters.txt'))
+else:
+    shutil.move('node_classifier/tmp/reproducibility_parameters.txt', os.path.join(model_path, 'reproducibility_parameters.txt'))
+
 RANDOM_STATE, workers = setup_random_seeds(model_path, cpu_num)
 
 # n_jobs = 2 ## original specs found in online-learning.py
@@ -305,8 +319,9 @@ with open(path_embedding_classes, 'r') as f:
 
 def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                          train_index_files_designation, test_index_files_designation,
-                         aproximate_model, RANDOM_STATE, max_len_explanations, explanation_limit, n_jobs,
-                         n_partitions, overwrite_invidivual_explanations=False):
+                         aproximate_model, RANDOM_STATE, max_len_explanations, explanation_limit,
+                         n_jobs, n_partitions,
+                         overwrite_invidivual_explanations=False):
     
     all_results_summary = []
     all_effectiveness_results_lenx = []
@@ -730,27 +745,30 @@ explanation_limit='threshold'
 aproximate_model = False
 all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
-                     max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits)
+                     max_len_explanations, explanation_limit, n_jobs,
+                     n_partitions=n_splits)
 
 save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
-explanation_limit='threshold'
+# explanation_limit='threshold'
 
-aproximate_model = True
-all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
-                     train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
-                     max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits, overwrite_invidivual_explanations=True)
+# aproximate_model = True
+# all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+#                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
+#                      max_len_explanations, explanation_limit, n_jobs,
+#                      n_partitions=n_splits, overwrite_invidivual_explanations=True)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
+# save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
-explanation_limit='class_change'
+# explanation_limit='class_change'
 
-aproximate_model = True
-all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
-                     train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
-                     max_len_explanations, explanation_limit, n_jobs, n_partitions=n_splits, overwrite_invidivual_explanations=False)
+# aproximate_model = True
+# all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+#                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
+#                      max_len_explanations, explanation_limit, n_jobs,
+#                      n_partitions=n_splits, overwrite_invidivual_explanations=False)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
+# save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
 toc_total_script_time = time.perf_counter()
 print(f"\nTotal script time in ({toc_total_script_time - tic_total_script_time:0.4f}s)\n")
