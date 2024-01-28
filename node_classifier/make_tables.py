@@ -32,6 +32,9 @@ kge_model = args.kge_model
 # dataset = 'AM_FROM_DGL'
 # dataset = 'MDGENRE'
 
+main_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model'
+# main_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_backup'
+
 
 ############################################################################### functions
 
@@ -50,7 +53,7 @@ def ensure_dir(path, option='make_if_not_exists'):
 
 
 def create_df_from_global_effectiveness_results(dataset, max_len_explanations, explanation_limit):
-    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}_{kge_model}/global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN'
+    load_path = f'{main_path}/{dataset}_{kge_model}/global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN'
     
     # with open(load_path + '.json', 'r') as f:
     #     results = json.load(f)
@@ -155,7 +158,7 @@ def create_df_from_global_effectiveness_results(dataset, max_len_explanations, e
 
 
 def create_df_from_all_effectiveness_results(dataset, max_len_explanations, explanation_limit):
-    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}_{kge_model}/all_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN'
+    load_path = f'{main_path}/{dataset}_{kge_model}/all_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN'
     
     # with open(load_path + '.json', 'r') as f:
     #     results = json.load(f)
@@ -218,7 +221,7 @@ def create_df_from_all_effectiveness_results(dataset, max_len_explanations, expl
 
 
 def create_df_from_global_classifier_results(dataset, model_type):
-    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}_{kge_model}/global_results_{model_type}'
+    load_path = f'{main_path}/{dataset}_{kge_model}/global_results_{model_type}'
     
     # with open(load_path + '.json', 'r') as f:
     #     results = json.load(f)
@@ -267,7 +270,7 @@ def create_df_from_global_classifier_results(dataset, model_type):
 
 
 def create_df_from_classifier_results(dataset, model_type):
-    load_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}_{kge_model}/all_results_{model_type}'
+    load_path = f'{main_path}/{dataset}_{kge_model}/all_results_{model_type}'
     
     # with open(load_path + '.json', 'r') as f:
     #     results = json.load(f)
@@ -371,7 +374,17 @@ def create_final_effectiveness_results(dataset, max_len_explanations, explanatio
 ############################################################################### script
 
 save_path = f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}_{kge_model}'
+
 ensure_dir(save_path, option='overwrite')
+
+## these tables are already final so just copy them
+try:
+    shutil.copy(f'{main_path}/{dataset}_{kge_model}/global_explain_stats_class_change.csv', f'{save_path}/global_explain_stats_class_change.csv')
+    shutil.copy(f'{main_path}/{dataset}_{kge_model}/global_explain_stats_threshold.csv', f'{save_path}/global_explain_stats_threshold.csv')
+except FileNotFoundError:
+    with open(f'{save_path}/warnings.log', 'a') as f:
+        f.write(f'file not found: {main_path}/{dataset}_{kge_model}/global_explain_stats_class_change.csv')
+
     
 max_len_explanations = 1
 explanation_limit = 'threshold'

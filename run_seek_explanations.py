@@ -1305,6 +1305,10 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
             explain_stats['necessary_len1_facts_qtt'].append(len(list(necessary_explan_len1_dict.keys())[1]))
             explain_stats[f'sufficient_len{max_len_explanations}_facts_qtt'].append(len(list(sufficient_explan_dict.keys())[1]))
             explain_stats['sufficient_len1_facts_qtt'].append(len(list(sufficient_explan_len1_dict.keys())[1]))
+            explain_stats[f'necessary_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(necessary_explan_dict.values())[1][1])
+            explain_stats[f'necessary_len1_satisfied_{explanation_limit}'].append(list(necessary_explan_len1_dict.values())[1][1])
+            explain_stats[f'sufficient_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(sufficient_explan_dict.values())[1][1])
+            explain_stats[f'sufficient_len1_satisfied_{explanation_limit}'].append(list(sufficient_explan_len1_dict.values())[1][1])
 
 
     else:
@@ -1388,7 +1392,13 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
             explain_stats['necessary_len1_facts_qtt'].append(len(list(necessary_explan_len1_dict.keys())[1]))
             explain_stats[f'sufficient_len{max_len_explanations}_facts_qtt'].append(len(list(sufficient_explan_dict.keys())[1]))
             explain_stats['sufficient_len1_facts_qtt'].append(len(list(sufficient_explan_len1_dict.keys())[1]))
+            explain_stats[f'necessary_len{max_len_explanations}_satisfied_{explanation_limit}'].append(len(list(necessary_explan_dict.values())[1][1]))
+            explain_stats[f'necessary_len1_satisfied_{explanation_limit}'].append(len(list(necessary_explan_len1_dict.values())[1][1]))
+            explain_stats[f'sufficient_len{max_len_explanations}_satisfied_{explanation_limit}'].append(len(list(sufficient_explan_dict.values())[1][1]))
+            explain_stats[f'sufficient_len1_satisfied_{explanation_limit}'].append(len(list(sufficient_explan_len1_dict.values())[1][1]))
 
+    # print(explain_stats)
+    # raise
     # print('all_necessary_explan')
     # print(all_necessary_explan)
 

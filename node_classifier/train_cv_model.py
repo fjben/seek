@@ -222,6 +222,7 @@ cpu_num = cpu_count()
 
 data_path = f'node_classifier/data/{dataset}'
 model_path = f'node_classifier/cv_model/{dataset}_{kge_model}'
+model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}'
 if kge_model == 'RDF2Vec':
     transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
 entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/entity_to_neighbours.json'
@@ -296,7 +297,13 @@ print('RANDOM_STATE:\t\t', RANDOM_STATE)
 print('workers:\t\t', workers)
 print("Number of used cpu:\t", n_jobs, '\n')
 
-train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_path, n_splits, RANDOM_STATE)
+## before was partitioning every time, now fixed partitions
+# train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_path, n_splits, RANDOM_STATE)
+if not os.listdir(model_data_partitions_path):
+    train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_data_partitions_path, n_splits, RANDOM_STATE)
+else:
+    train_index_files_designation = os.path.join(model_data_partitions_path, 'data_partitions/Indexes_crossvalidationTrain_Run')
+    test_index_files_designation = os.path.join(model_data_partitions_path, 'data_partitions/Indexes_crossvalidationTest_Run')
 
 ## I don't think I need this, I can load this information using the /trained data directly from the dict
 if kge_model == 'RDF2Vec':
@@ -680,19 +687,24 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
     if all_effectiveness_results[0] or all_effectiveness_results[1]:
         global_explain_stats = dict()
         for key, value in all_explain_stats.items():
+            if key == 'entities':
+                continue
             if key == 'explain_times':
                 total_time = np.sum(value)
                 global_explain_stats[f'{key}_total'] = total_time
-            if key != 'entities':
+            elif key.split('_')[-1] == 'qtt':
                 mean, std = np.mean(value), np.std(value)
                 global_explain_stats[f'{key}_mean'] = mean
                 global_explain_stats[f'{key}_std'] = std
+            elif key.split('_')[-2] == 'satisfied':
+                racio = value.count(True) / len(value)
+                global_explain_stats[f'{key}_racio'] = racio
+
 
         print(f'\n##########     Explainer Stats     ##########')
         for key, value in global_explain_stats.items():
             print(f'{key}: {value}')
-        print('\n')
-    
+        print('\n')    
         
     if aproximate_model:
         model_type = 'RAN' ## representation with aggregate neighbours
