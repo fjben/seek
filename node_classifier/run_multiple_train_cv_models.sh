@@ -2,6 +2,8 @@
 
 set -e
 
+## FOR REPRODUCIBLE RESULTS JUST PUT THE reproducibility_parameters.txt FILE IN THE tmp FOLDER AND COMMENT THE NEXT
+## LINE
 # python3 node_classifier/define_reproducibility_parameters.py
 
 reproducibility_parameters_file='node_classifier/tmp/reproducibility_parameters.txt'
@@ -35,14 +37,26 @@ kge_models=(
     'TransH'
 )
 
-for DATASET in 'MUTAG' 'AM_FROM_DGL' 'MDGENRE' ## 'AIFB'
+for DATASET in 'AM_FROM_DGL' ## 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE'
 # for DATASET in "${datasets}"
 do
-    for KGE_MODEL in 'RDF2Vec' ## 'ComplEx' 'distMult' 'TransE' 'TransH'
+    for KGE_MODEL in 'RDF2Vec' ## 'RDF2Vec' 'ComplEx' 'distMult' 'TransE' 'TransH'
     # for KGE_MODEL in "${kge_models}"
     do
         python3 node_classifier/train_cv_model.py --dataset $DATASET --kge_model $KGE_MODEL --keep_seeds_for_running_multiple_cv_models
     done
 done
 
+# for DATASET in 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE'
+# # for DATASET in "${datasets}"
+# do
+#     for KGE_MODEL in 'ComplEx' 'distMult' 'TransE' 'TransH'
+#     # for KGE_MODEL in "${kge_models}"
+#     do
+#         python3 node_classifier/train_cv_model.py --dataset $DATASET --kge_model $KGE_MODEL --keep_seeds_for_running_multiple_cv_models
+#     done
+# done
+
+## TO KEEP THE SAME PARAMETERS JUST USE --keep_seeds_for_running_multiple_cv_models IN THE SCRIPT AND COMMENT THE NEXT
+## LINE
 # rm node_classifier/tmp/reproducibility_parameters.txt

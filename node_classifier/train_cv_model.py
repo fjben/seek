@@ -26,7 +26,7 @@ from pyrdf2vec import RDF2VecTransformer
 
 sys.path.append(os.path.realpath(os.path.join(os.path.abspath(__file__), os.path.pardir, os.path.pardir)))
 from utils.logger import Logger
-from run_seek_explanations import compute_effectiveness_kelpie
+from run_seek_explanations import compute_effectiveness_kelpie, compute_random
 
 
 tic_total_script_time = time.perf_counter()
@@ -223,6 +223,7 @@ cpu_num = cpu_count()
 
 data_path = f'node_classifier/data/{dataset}'
 model_path = f'node_classifier/cv_model/{dataset}_{kge_model}'
+# model_path = f'node_classifier/cv_model_test/{dataset}_{kge_model}'
 model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions'
 if kge_model == 'RDF2Vec':
     transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
@@ -335,6 +336,8 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
     all_results_summary = []
     all_effectiveness_results_lenx = []
     all_effectiveness_results_len1 = []
+    all_random_effectiveness_results_lenx = []
+    all_random_effectiveness_results_len1 = []
     all_explain_stats = defaultdict(list)
     for index_partition in range(0, n_partitions):
         train_index = process_indexes_partition(train_index_files_designation + str(index_partition) + '.txt')
@@ -365,7 +368,7 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
         # print(len(train_embeddings))
         # print(len(test_embeddings))
 
-        clf, results_summary, effectiveness_results, explain_stats = train_classifier(train_embeddings, train_labels, test_embeddings,
+        clf, results_summary, effectiveness_results, random_effectiveness_results, explain_stats = train_classifier(train_embeddings, train_labels, test_embeddings,
                                                                        test_labels, test_entities, aproximate_model,
                                                                        entity_to_neighbours, dic_emb_classes,
                                                                        max_len_explanations, explanation_limit,
@@ -378,6 +381,8 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
         all_results_summary.append(results_summary)
         all_effectiveness_results_lenx.append(effectiveness_results[0])
         all_effectiveness_results_len1.append(effectiveness_results[1])
+        all_random_effectiveness_results_lenx.append(random_effectiveness_results[0])
+        all_random_effectiveness_results_len1.append(random_effectiveness_results[1])
         if explain_stats:
             for key, _ in explain_stats.items():
                 all_explain_stats[key].extend(explain_stats[key])
@@ -385,8 +390,14 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
     if not any(all_effectiveness_results_lenx) and not any(all_effectiveness_results_len1):
         all_effectiveness_results_lenx = False
         all_effectiveness_results_len1 = False
+    if not any(all_random_effectiveness_results_lenx) and not any(all_random_effectiveness_results_len1):
+        all_random_effectiveness_results_lenx = False
+        all_random_effectiveness_results_len1 = False
 
-    return all_results_summary, [all_effectiveness_results_lenx, all_effectiveness_results_len1], all_explain_stats
+    return all_results_summary, \
+           [all_effectiveness_results_lenx, all_effectiveness_results_len1], \
+           [all_random_effectiveness_results_lenx, all_random_effectiveness_results_len1], \
+           all_explain_stats
 
 def get_embeddings(aproximate_model, all_embeddings, all_entities, entity_to_neighbours, entities):
     if aproximate_model:
@@ -473,6 +484,44 @@ def save_explanation(path_entity_explanations, len_explanations, explanation_lim
                     single_line_part1 = '\t'.join(single_line_part1)
                     # print(single_line_part1)
                 f.write('\t'.join([single_line_part0, single_line_part1, '\n']))
+
+
+def save_effectiveness_results(path_explanations, max_len_explanations, effectiveness_results,
+                                       paths_to_explanations, explanations_dicts, path_individual_explanations):
+            with open(os.path.join(path_explanations, f'effectiveness_results_len{max_len_explanations}.json'), 'w',
+                      encoding ='utf8') as f: 
+                json.dump(effectiveness_results[0], f, ensure_ascii = False)
+            df = pd.DataFrame([effectiveness_results[0]])
+            df.to_csv(os.path.join(path_explanations, f'effectiveness_results_len{max_len_explanations}.csv'),
+                      sep='\t')
+            with open(os.path.join(path_explanations, f'effectiveness_results_len1.json'), 'w', encoding ='utf8') as f: 
+                json.dump(effectiveness_results[1], f, ensure_ascii = False)
+            df = pd.DataFrame([effectiveness_results[1]])
+            df.to_csv(os.path.join(path_explanations, f'effectiveness_results_len1.csv'), sep='\t')
+
+            necessary_paths_best_expl_dict, sufficient_paths_best_expl_dict = paths_to_explanations
+            # print('\n\n\n\n\nhere')
+            explanations_dict_lenx, explanations_dict_len1 = explanations_dicts
+            for key, [nec_len, suf_len] in explanations_dict_lenx.items():
+                necessary_path = necessary_paths_best_expl_dict[key]
+                sufficient_path = sufficient_paths_best_expl_dict[key]
+                path_entity_explanations = os.path.join(path_individual_explanations, f'{key.split("/")[-1]}')
+                # print(path_entity_explanations)
+                ensure_dir(path_entity_explanations, option='make_if_not_exists')
+                save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, nec_len,
+                                 necessary_path, 'necessary')
+                save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, suf_len,
+                                 sufficient_path, 'sufficient')
+
+
+            for key, [nec_len, suf_len] in explanations_dict_len1.items():
+                path_entity_explanations = os.path.join(path_individual_explanations, f'{key.split("/")[-1]}')
+                ensure_dir(path_entity_explanations, option='make_if_not_exists')
+                len_explanations = 1
+                save_explanation(path_entity_explanations, len_explanations, explanation_limit, nec_len, None,
+                                 'necessary')
+                save_explanation(path_entity_explanations, len_explanations, explanation_limit, suf_len, None,
+                                 'sufficient')
 
 
 def train_classifier(train_embeddings, train_labels, test_embeddings, test_labels, test_entities, aproximate_model,
@@ -565,40 +614,31 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         explain_stats = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf,
                                                      results_summary, path_explanations, max_len_explanations,
                                                      explanation_limit, n_jobs)
+        save_effectiveness_results(path_explanations, max_len_explanations, effectiveness_results,
+                                   paths_to_explanations, explanations_dicts, path_individual_explanations)
         
-        with open(os.path.join(path_explanations, f'effectiveness_results_len{max_len_explanations}.json'), 'w', encoding ='utf8') as f: 
-            json.dump(effectiveness_results[0], f, ensure_ascii = False)
-        df = pd.DataFrame([effectiveness_results[0]])
-        df.to_csv(os.path.join(path_explanations, f'effectiveness_results_len{max_len_explanations}.csv'), sep='\t')
-        with open(os.path.join(path_explanations, f'effectiveness_results_len1.json'), 'w', encoding ='utf8') as f: 
-            json.dump(effectiveness_results[1], f, ensure_ascii = False)
-        df = pd.DataFrame([effectiveness_results[1]])
-        df.to_csv(os.path.join(path_explanations, f'effectiveness_results_len1.csv'), sep='\t')
+        random_effectiveness_results = compute_random(dataset_labels, clf, dic_emb_classes, entity_to_neighbours, explanations_dicts)
+        # print(random_effectiveness_results)
+        # raise
 
-        necessary_paths_best_expl_dict, sufficient_paths_best_expl_dict = paths_to_explanations
-        # print('\n\n\n\n\nhere')
-        explanations_dict_lenx, explanations_dict_len1 = explanations_dicts
-        for key, [nec_len, suf_len] in explanations_dict_lenx.items():
-            necessary_path = necessary_paths_best_expl_dict[key]
-            sufficient_path = sufficient_paths_best_expl_dict[key]
-            path_entity_explanations = os.path.join(path_individual_explanations, f'{key.split("/")[-1]}')
-            # print(path_entity_explanations)
-            ensure_dir(path_entity_explanations, option='make_if_not_exists')
-            save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, nec_len, necessary_path, 'necessary')
-            save_explanation(path_entity_explanations, max_len_explanations, explanation_limit, suf_len, sufficient_path, 'sufficient')
+        # fact_qtt_keys = [f'necessary_len{max_len_explanations}', 'necessary_len1_facts_qtt',
+        #                  f'sufficient_len{max_len_explanations}', 'sufficient_len1_facts_qtt']
+        # facts_qtt_info_for_random = {key: explain_stats[key] for key in fact_qtt_keys}
+        # effectiveness_results, \
+        # explanations_dicts, \
+        # paths_to_explanations, \
+        # explain_stats = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf,
+        #                                              results_summary, path_explanations, max_len_explanations,
+        #                                              explanation_limit, n_jobs, facts_qtt_info_for_random)
+        # save_effectiveness_results(path_explanations, max_len_explanations, effectiveness_results,
+        #                            paths_to_explanations, explanations_dicts, path_individual_explanations)
 
-
-        for key, [nec_len, suf_len] in explanations_dict_len1.items():
-            path_entity_explanations = os.path.join(path_individual_explanations, f'{key.split("/")[-1]}')
-            ensure_dir(path_entity_explanations, option='make_if_not_exists')
-            len_explanations = 1
-            save_explanation(path_entity_explanations, len_explanations, explanation_limit, nec_len, None, 'necessary')
-            save_explanation(path_entity_explanations, len_explanations, explanation_limit, suf_len, None, 'sufficient')
     else:
         effectiveness_results = [False, False]
+        random_effectiveness_results = [False, False]
         explain_stats = False
 
-    return clf, results_summary, effectiveness_results, explain_stats
+    return clf, results_summary, effectiveness_results, random_effectiveness_results, explain_stats
 
 
 def save_model_results(dataset, clf, current_model_models_path, current_model_models_results_path, current_model_trained_path,
@@ -644,7 +684,8 @@ def global_results_dict(all_results):
     return global_results
     
 
-def save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats,
+def save_global_results(aproximate_model, all_results_summary, all_effectiveness_results,
+                        all_random_effectiveness_results, all_explain_stats,
                         max_len_explanations, explanation_limit):
     global_results = global_results_dict(all_results_summary)
     # df = pd.DataFrame(all_results_summary)
@@ -661,6 +702,10 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
     if all_effectiveness_results[0] and all_effectiveness_results[1]:
         global_effectiveness_results_lenx = global_results_dict(all_effectiveness_results[0])
         global_effectiveness_results_len1 = global_results_dict(all_effectiveness_results[1])
+
+    if all_random_effectiveness_results[0] and all_random_effectiveness_results[1]:
+        global_random_effectiveness_results_lenx = global_results_dict(all_random_effectiveness_results[0])
+        global_random_effectiveness_results_len1 = global_results_dict(all_random_effectiveness_results[1])
 
     # for d_to_print, description in zip([global_results, global_effectiveness_results],
     #                                    ['Global Classifier Results', 'Global Explainer Results']):
@@ -751,38 +796,53 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
         with open(os.path.join(model_path, f'global_explain_stats_{explanation_limit}.json'), 'w', encoding ='utf8') as f: 
             json.dump(global_explain_stats, f, ensure_ascii = False)
 
+    if all_random_effectiveness_results[0]:
+        df = pd.DataFrame(all_random_effectiveness_results[0])
+        df.to_csv(os.path.join(model_path, f'all_random_effectiveness_results_len{max_len_explanations}_{explanation_limit}_{model_type}.csv'), sep='\t')
+        with open(os.path.join(model_path, f'global_random_effectiveness_results_len{max_len_explanations}_{explanation_limit}_{model_type}.json'), 'w', encoding ='utf8') as f: 
+            json.dump(global_random_effectiveness_results_lenx, f, ensure_ascii = False)
+        df = pd.DataFrame([global_random_effectiveness_results_lenx])
+        df.to_csv(os.path.join(model_path, f'global_random_effectiveness_results_len{max_len_explanations}_{explanation_limit}_{model_type}.csv'), sep='\t')
+    if all_random_effectiveness_results[1]:
+        df = pd.DataFrame(all_random_effectiveness_results[1])
+        df.to_csv(os.path.join(model_path, f'all_random_effectiveness_results_len1_{explanation_limit}_{model_type}.csv'), sep='\t')
+        with open(os.path.join(model_path, f'global_random_effectiveness_results_len1_{explanation_limit}_{model_type}.json'), 'w', encoding ='utf8') as f: 
+            json.dump(global_random_effectiveness_results_len1, f, ensure_ascii = False)
+        df = pd.DataFrame([global_random_effectiveness_results_len1])
+        df.to_csv(os.path.join(model_path, f'global_random_effectiveness_results_len1_{explanation_limit}_{model_type}.csv'), sep='\t')
+
     return global_results
 
 
 explanation_limit='threshold'
 
 aproximate_model = False
-all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
                      max_len_explanations, explanation_limit, n_jobs,
                      n_partitions=n_splits)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
 explanation_limit='threshold'
 
 aproximate_model = True
-all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
                      max_len_explanations, explanation_limit, n_jobs,
                      n_partitions=n_splits, overwrite_invidivual_explanations=True)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
 explanation_limit='class_change'
 
 aproximate_model = True
-all_results_summary, all_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
                      max_len_explanations, explanation_limit, n_jobs,
                      n_partitions=n_splits, overwrite_invidivual_explanations=False)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
 
 toc_total_script_time = time.perf_counter()
 print(f"\nTotal script time in ({toc_total_script_time - tic_total_script_time:0.4f}s)\n")

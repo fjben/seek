@@ -1462,6 +1462,152 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
            [necessary_paths_best_expl_dict, sufficient_paths_best_expl_dict], \
             explain_stats
 
+def compute_random(dataset_labels, ml_model, dic_emb_classes, entity_to_neighbours, explanations_dicts):
+
+    n_embeddings = len(list(dic_emb_classes.values())[0])
+
+    labels = [label for (_, label) in dataset_labels]
+
+    pred_eva_necessary, pred_eva_necessary_len1 = [], []
+    pred_eva_sufficient, pred_eva_sufficient_len1 = [], []
+    original_pred_eva = []
+    for idx, (entity, _) in enumerate(dataset_labels):
+        [all_neighbours, all_neighbour_relation] = entity_to_neighbours[entity]
+
+        ## this code is repeated in explain(), improve this
+        all_vectors = []
+        for neighbour in all_neighbours:
+            all_vectors.append(dic_emb_classes[neighbour])
+        if len(all_vectors) == 0:
+            all_avg_vectors = np.array([0 for i in range(n_embeddings)])
+        elif len(all_vectors) == 1:
+            all_avg_vectors = np.array(all_vectors[0])
+        else:
+            all_array_vectors = np.array(all_vectors)
+            all_avg_vectors = np.average(all_array_vectors, 0)
+
+        X_test_original = [all_avg_vectors.tolist()]
+        pred_original = ml_model.predict(X_test_original).tolist()[0]
+        pred_proba_original = ml_model.predict_proba(X_test_original).tolist()[0]
+        predicted_class_original = np.argmax(pred_proba_original)
+        pred_proba_predicted_class_original = pred_proba_original[predicted_class_original]
+        original_pred_eva.append(pred_original)
+
+
+        ## listing all neighbours that where accepted as explanations, not just the best explanations
+        explanations_dict_lenx, explanations_dict_len1 = explanations_dicts
+        nec_len, suf_len = explanations_dict_lenx[entity]
+        # explain_neighb_nec_lenx = [neighb for (neighb, _) in list(nec_len.keys())[1]]
+        # explain_neighb_nec_lenx = []
+        # for i in range(1, len(nec_len.keys())):
+        #      print(list(nec_len.keys())[i], '\n')
+        #      for (neighb, _) in list(nec_len.keys())[i]:
+        #          explain_neighb_nec_lenx.append(neighb)
+        # print([list(nec_len.keys())[i] for i in range(1, len(nec_len.keys()))])
+        # explain_neighb_nec_lenx = [neighb for i in range(1, len(nec_len.keys())) for (neighb, _) in list(nec_len.keys())[i]]
+        # explain_neighb_nec_lenx = list(set(explain_neighb_nec_lenx))
+        # print(explain_neighb_nec_lenx)
+        explain_neighbs_nec_lenx_best_to_worst = [[neighb for (neighb, _) in list(nec_len.keys())[i]] for i in range(1, len(nec_len.keys()))]
+        # print(explain_neighbs_nec_lenx_best_to_worst)
+        explain_neighb_nec_lenx = [neighb for neighbs in explain_neighbs_nec_lenx_best_to_worst for neighb in neighbs]
+        explain_neighbs_nec_lenx_best_to_worst_flat_unique = []
+        [explain_neighbs_nec_lenx_best_to_worst_flat_unique.append(neighb) for neighb
+            in explain_neighb_nec_lenx if neighb not in explain_neighbs_nec_lenx_best_to_worst_flat_unique]
+        # print('\n', explain_neighbs_nec_lenx_best_to_worst)
+        # print('\n', explain_neighbs_nec_lenx_best_to_worst_flat_unique)
+        # raise
+        # explain_neighb_nec_lenx = list(set(explain_neighb_nec_lenx))
+        # print(explain_neighb_nec_lenx)
+        # explain_neighb_suf_lenx = [neighb for (neighb, _) in list(suf_len.keys())[1]]
+        # explain_neighb_suf_lenx = [neighb for i in range(1, len(suf_len.keys())) for (neighb, _) in list(suf_len.keys())[i]]
+        # explain_neighb_suf_lenx = list(set(explain_neighb_suf_lenx))
+        explain_neighbs_suf_lenx_best_to_worst = [[neighb for (neighb, _) in list(suf_len.keys())[i]] for i in range(1, len(suf_len.keys()))]
+        explain_neighb_suf_lenx = [neighb for neighbs in explain_neighbs_suf_lenx_best_to_worst for neighb in neighbs]
+        explain_neighbs_suf_lenx_best_to_worst_flat_unique = []
+        [explain_neighbs_suf_lenx_best_to_worst_flat_unique.append(neighb) for neighb
+            in explain_neighb_suf_lenx if neighb not in explain_neighbs_suf_lenx_best_to_worst_flat_unique]
+        # explain_neighb_suf_lenx = list(set(explain_neighb_suf_lenx))
+
+        # explain_neighb_nec_len1 = [neighb for (neighb, _) in list(nec_len.keys())[1]]
+        # explain_neighb_nec_len1 = [neighb for i in range(1, len(nec_len.keys())) for (neighb, _) in list(nec_len.keys())[i]]
+        # explain_neighb_nec_len1 = list(set(explain_neighb_nec_len1))
+        nec_len, suf_len = explanations_dict_len1[entity]
+        explain_neighbs_nec_len1_best_to_worst = [[neighb for (neighb, _) in list(nec_len.keys())[i]] for i in range(1, len(nec_len.keys()))]
+        explain_neighb_nec_len1 = [neighb for neighbs in explain_neighbs_nec_len1_best_to_worst for neighb in neighbs]
+        explain_neighbs_nec_len1_best_to_worst_flat_unique = []
+        [explain_neighbs_nec_len1_best_to_worst_flat_unique.append(neighb) for neighb
+            in explain_neighb_nec_len1 if neighb not in explain_neighbs_nec_len1_best_to_worst_flat_unique]
+        # explain_neighb_nec_len1 = list(set(explain_neighb_nec_len1))
+        # explain_neighb_suf_len1 = [neighb for (neighb, _) in list(suf_len.keys())[1]]
+        # explain_neighb_suf_len1 = [neighb for i in range(1, len(suf_len.keys())) for (neighb, _) in list(suf_len.keys())[i]]
+        # explain_neighb_suf_len1 = list(set(explain_neighb_suf_len1))
+        explain_neighbs_suf_len1_best_to_worst = [[neighb for (neighb, _) in list(suf_len.keys())[i]] for i in range(1, len(suf_len.keys()))]
+        explain_neighb_suf_len1 = [neighb for neighbs in explain_neighbs_suf_len1_best_to_worst for neighb in neighbs]
+        explain_neighbs_suf_len1_best_to_worst_flat_unique = []
+        [explain_neighbs_suf_len1_best_to_worst_flat_unique.append(neighb) for neighb
+            in explain_neighb_suf_len1 if neighb not in explain_neighbs_suf_len1_best_to_worst_flat_unique]
+        # explain_neighb_suf_len1 = list(set(explain_neighb_suf_len1))
+
+        explain_neighbs_best_to_worst_packed = [explain_neighbs_nec_lenx_best_to_worst,
+                                                explain_neighbs_suf_lenx_best_to_worst,
+                                                explain_neighbs_nec_len1_best_to_worst,
+                                                explain_neighbs_suf_len1_best_to_worst]
+        
+        explain_neighbs_best_to_worst_flat_unique_packed = [explain_neighbs_nec_lenx_best_to_worst_flat_unique,
+                                                explain_neighbs_suf_lenx_best_to_worst_flat_unique,
+                                                explain_neighbs_nec_len1_best_to_worst_flat_unique,
+                                                explain_neighbs_suf_len1_best_to_worst_flat_unique]
+
+        explain_neighb_packed = [explain_neighb_nec_lenx, explain_neighb_suf_lenx,
+                          explain_neighb_nec_len1, explain_neighb_suf_len1]
+
+        predicted_classes_with_random = []
+        for expl_btw, expl_btw_flat_unique, explan_type in zip(explain_neighbs_best_to_worst_packed,
+                                                           explain_neighbs_best_to_worst_flat_unique_packed,
+                                                           ['necessary', 'sufficient', 'necessary', 'sufficient']):
+            best_neighbours = expl_btw[0]
+            ## picks randomly without replacement a quantity of neighbours equal to the quantity in the explanation,
+            ## except the neighbours in the explanations itself
+            remaining_neighbours = [neighb for neighb in all_neighbours if neighb not in expl_btw_flat_unique]
+            ## first if the remaining len was less or even zero I would use that, now if the len is less I always keep
+            ## at least the same quantity of facts even if some are taken from the accepted explanations but starting
+            ## with the worst explanations
+            # sample_len = len(expl_n) if len(expl_n) < len(remaining_neighbours) else len(remaining_neighbours)
+            facts_deficit_in_remaining_neighbours = len(best_neighbours) - len(remaining_neighbours)
+            if facts_deficit_in_remaining_neighbours > 0:
+                random_facts = remaining_neighbours
+                i = len(expl_btw_flat_unique) - 1
+                while len(random_facts) < len(best_neighbours):
+                    random_facts.append(expl_btw_flat_unique[i])
+                    i -= 1
+            else:
+                random_facts = random.sample(remaining_neighbours, len(best_neighbours))
+            # print(len(best_neighbours))
+            # print(len(random_facts))
+
+            avg_vectors = get_list_of_vectors_with_some_neighbours(dic_emb_classes, all_neighbours,
+                                                                    random_facts, explan_type=explan_type)
+            
+            X_test = get_avg_vectors(avg_vectors, n_embeddings)
+
+            new_predicted_class, \
+            new_predicted_class_num, \
+            new_pred_proba_predicted_class_original = get_new_score(ml_model, X_test, predicted_class_original, entity)
+            predicted_classes_with_random.append(new_predicted_class)
+        pred_eva_necessary.append(predicted_classes_with_random[0])
+        pred_eva_sufficient.append(predicted_classes_with_random[1])
+        pred_eva_necessary_len1.append(predicted_classes_with_random[2])
+        pred_eva_sufficient_len1.append(predicted_classes_with_random[3])
+
+    effectiveness_results_lenx = compute_performance_metrics_v2(labels, original_pred_eva,
+                                                           pred_eva_necessary, pred_eva_sufficient)
+    
+    effectiveness_results_len1 = compute_performance_metrics_v2(labels, original_pred_eva,
+                                                           pred_eva_necessary_len1, pred_eva_sufficient_len1)
+
+    return [effectiveness_results_lenx, effectiveness_results_len1]
+
+
 if __name__== '__main__':
 
     ####################################### PPI prediction
