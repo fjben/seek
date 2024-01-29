@@ -15,7 +15,7 @@ kge_models=(
     'TransH'
 )
 
-for DATASET in 'MUTAG' ## 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE'
+for DATASET in 'AIFB' 'MUTAG' ## 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE'
 # for DATASET in "${datasets}"
 do
     for KGE_MODEL in 'RDF2Vec' ## 'RDF2Vec' 'ComplEx' 'distMult' 'TransE' 'TransH'

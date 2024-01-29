@@ -1300,15 +1300,15 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
             sufficient_paths_best_expl_dict[entity] = sufficient_path_to_best_explanation
 
             [all_neighbours, all_neighbour_relation] = entity_to_neighbours[entity]
-            all_neighbours_qtt = len(all_neighbours)
+            all_neighbours_size = len(all_neighbours)
 
             explain_stats['entities'].append(entity)
+            explain_stats['all_neighbours_size'].append(all_neighbours_size)
             explain_stats['explain_times'].append(explain_entity_time)
-            explain_stats['all_neighbours_qtt'].append(all_neighbours_qtt)
-            explain_stats[f'necessary_len{max_len_explanations}_facts_qtt'].append(len(list(necessary_explan_dict.keys())[1]))
-            explain_stats['necessary_len1_facts_qtt'].append(len(list(necessary_explan_len1_dict.keys())[1]))
-            explain_stats[f'sufficient_len{max_len_explanations}_facts_qtt'].append(len(list(sufficient_explan_dict.keys())[1]))
-            explain_stats['sufficient_len1_facts_qtt'].append(len(list(sufficient_explan_len1_dict.keys())[1]))
+            explain_stats[f'necessary_len{max_len_explanations}_facts_size'].append(len(list(necessary_explan_dict.keys())[1]))
+            explain_stats['necessary_len1_facts_size'].append(len(list(necessary_explan_len1_dict.keys())[1]))
+            explain_stats[f'sufficient_len{max_len_explanations}_facts_size'].append(len(list(sufficient_explan_dict.keys())[1]))
+            explain_stats['sufficient_len1_facts_size'].append(len(list(sufficient_explan_len1_dict.keys())[1]))
             explain_stats[f'necessary_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(necessary_explan_dict.values())[1][1])
             explain_stats[f'necessary_len1_satisfied_{explanation_limit}'].append(list(necessary_explan_len1_dict.values())[1][1])
             explain_stats[f'sufficient_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(sufficient_explan_dict.values())[1][1])
@@ -1392,19 +1392,19 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
             # print(len(list(necessary_explan_dict.keys())[1]))
 
             [all_neighbours, all_neighbour_relation] = entity_to_neighbours[entity]
-            all_neighbours_qtt = len(all_neighbours)
+            all_neighbours_size = len(all_neighbours)
 
             explain_stats['entities'].append(entity)
+            explain_stats['all_neighbours_size'].append(all_neighbours_size)
             explain_stats['explain_times'].append(explain_entity_time)
-            explain_stats['all_neighbours_qtt'].append(all_neighbours_qtt)
-            explain_stats[f'necessary_len{max_len_explanations}_facts_qtt'].append(len(list(necessary_explan_dict.keys())[1]))
-            explain_stats['necessary_len1_facts_qtt'].append(len(list(necessary_explan_len1_dict.keys())[1]))
-            explain_stats[f'sufficient_len{max_len_explanations}_facts_qtt'].append(len(list(sufficient_explan_dict.keys())[1]))
-            explain_stats['sufficient_len1_facts_qtt'].append(len(list(sufficient_explan_len1_dict.keys())[1]))
-            explain_stats[f'necessary_len{max_len_explanations}_satisfied_{explanation_limit}'].append(len(list(necessary_explan_dict.values())[1][1]))
-            explain_stats[f'necessary_len1_satisfied_{explanation_limit}'].append(len(list(necessary_explan_len1_dict.values())[1][1]))
-            explain_stats[f'sufficient_len{max_len_explanations}_satisfied_{explanation_limit}'].append(len(list(sufficient_explan_dict.values())[1][1]))
-            explain_stats[f'sufficient_len1_satisfied_{explanation_limit}'].append(len(list(sufficient_explan_len1_dict.values())[1][1]))
+            explain_stats[f'necessary_len{max_len_explanations}_facts_size'].append(len(list(necessary_explan_dict.keys())[1]))
+            explain_stats['necessary_len1_facts_size'].append(len(list(necessary_explan_len1_dict.keys())[1]))
+            explain_stats[f'sufficient_len{max_len_explanations}_facts_size'].append(len(list(sufficient_explan_dict.keys())[1]))
+            explain_stats['sufficient_len1_facts_size'].append(len(list(sufficient_explan_len1_dict.keys())[1]))
+            explain_stats[f'necessary_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(necessary_explan_dict.values())[1][1])
+            explain_stats[f'necessary_len1_satisfied_{explanation_limit}'].append(list(necessary_explan_len1_dict.values())[1][1])
+            explain_stats[f'sufficient_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(sufficient_explan_dict.values())[1][1])
+            explain_stats[f'sufficient_len1_satisfied_{explanation_limit}'].append(list(sufficient_explan_len1_dict.values())[1][1])
 
     # print(explain_stats)
     # raise
@@ -1581,18 +1581,23 @@ def compute_random(dataset_labels, ml_model, dic_emb_classes, entity_to_neighbou
             ## first if the remaining len was less or even zero I would use that, now if the len is less I always keep
             ## at least the same quantity of facts even if some are taken from the accepted explanations but starting
             ## with the worst explanations
-            # sample_len = len(expl_n) if len(expl_n) < len(remaining_neighbours) else len(remaining_neighbours)
-            facts_deficit_in_remaining_neighbours = len(best_neighbours) - len(remaining_neighbours)
-            if facts_deficit_in_remaining_neighbours > 0:
-                random_facts = remaining_neighbours
-                i = len(expl_btw_flat_unique) - 1
-                while len(random_facts) < len(best_neighbours):
-                    random_facts.append(expl_btw_flat_unique[i])
-                    i -= 1
+            keep_always_minimum_neighbours = True
+            if keep_always_minimum_neighbours:
+                facts_deficit_in_remaining_neighbours = len(best_neighbours) - len(remaining_neighbours)
+                if facts_deficit_in_remaining_neighbours > 0:
+                    random_facts = remaining_neighbours
+                    i = len(expl_btw_flat_unique) - 1
+                    while len(random_facts) < len(best_neighbours):
+                        random_facts.append(expl_btw_flat_unique[i])
+                        i -= 1
+                else:
+                    random_facts = random.sample(remaining_neighbours, len(best_neighbours))
+                # print(len(best_neighbours))
+                # print(len(random_facts))
             else:
-                random_facts = random.sample(remaining_neighbours, len(best_neighbours))
-            # print(len(best_neighbours))
-            # print(len(random_facts))
+                sample_len = len(best_neighbours) if len(best_neighbours) < len(remaining_neighbours) else len(remaining_neighbours)
+                print(len(remaining_neighbours))
+                random_facts = random.sample(remaining_neighbours, sample_len)
 
             avg_vectors = get_list_of_vectors_with_some_neighbours(dic_emb_classes, all_neighbours,
                                                                     random_facts, explan_type=explan_type)

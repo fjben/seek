@@ -734,40 +734,48 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
     if all_effectiveness_results[0] or all_effectiveness_results[1]:
         global_explain_stats = dict()
         for key, value in all_explain_stats.items():
+            print(key)
             if key == 'entities':
-                continue
-            if key == 'explain_times':
+                global_explain_stats[f'explained_{key}_size'] = len(value)
+            elif key == 'all_neighbours_size':
+                global_explain_stats[f'{key}'] = sum(value)
+                mean, std = np.mean(value), np.std(value)
+                global_explain_stats[f'neighbours_per_entity_mean_(std)'] = f'{round(mean, 3)} ({round(std, 3)})'
+            elif key == 'explain_times':
                 total_time = np.sum(value)
-                global_explain_stats[f'{key}_total'] = total_time
-            elif key == 'all_neighbours_qtt':
-                global_explain_stats[f'{key}'] = len(value)
-            elif key.split('_')[-1] == 'qtt':
+
+                ## this was just summing but with multiprocessing this means nothing because it is not real time
+                # global_explain_stats[f'{key}_total'] = round(total_time, 3) 
+                
+                mean, std = np.mean(value), np.std(value)
+                global_explain_stats[f'explain_time_per_entity_mean_(std)'] = f'{round(mean, 3)} ({round(std, 3)})'
+            elif key.split('_')[3] == 'size':
                 mean, std = np.mean(value), np.std(value)
                 # global_explain_stats[f'{key}_mean'] = mean
                 # global_explain_stats[f'{key}_std'] = std
-                global_explain_stats[f'{key}_mean_(std)'] = f'{mean} ({std})'
-                dif = np.array(all_explain_stats['all_neighbours_qtt']) - np.array(value)
-                global_explain_stats[f'{key}_all_neighbours_used'] = np.count_nonzero(dif==0) / len(all_explain_stats['entities'])
+                global_explain_stats[f'{key}_mean_(std)'] = f'{round(mean, 3)} ({round(std, 3)})'
+                dif = np.array(all_explain_stats['all_neighbours_size']) - np.array(value)
+                global_explain_stats[f'{key}_all_neighbours_used'] = round(np.count_nonzero(dif==0) / len(all_explain_stats['entities']), 3)
                 ## this was I'm evaluating the sparsity of the global model so entities with few facts don't have so
                 ## much weight as with the other version of sparsity
-                global_explain_stats[f'{key}_global_sparsity'] = sum(value) / sum(all_explain_stats['all_neighbours_qtt'])
+                global_explain_stats[f'{key}_global_sparsity'] = round(sum(value) / sum(all_explain_stats['all_neighbours_size']), 3)
                 # using this way I'm calculating sparsity for each and then averaging, this means that entities where
                 # there are few facts sparsity will be high and influence more the global sparsity value
                 # print(np.array(value))
                 # print(np.array(value).shape)
-                # print(np.array(all_explain_stats['all_neighbours_qtt']))
+                # print(np.array(all_explain_stats['all_neighbours_size']))
                 # print(np.count_nonzero(dif==0))
                 # print(len(all_explain_stats['entities']))
-                # print(np.array(all_explain_stats['all_neighbours_qtt']).shape)
-                sparsity = np.array(value) / np.array(all_explain_stats['all_neighbours_qtt'])
+                # print(np.array(all_explain_stats['all_neighbours_size']).shape)
+                sparsity = np.array(value) / np.array(all_explain_stats['all_neighbours_size'])
                 mean, std = np.mean(sparsity), np.std(sparsity)
                 # global_explain_stats[f'{key}_sparsity_per_entity_mean'] = mean
                 # global_explain_stats[f'{key}_sparsity_per_entity_std'] = std
-                global_explain_stats[f'{key}_sparsity_per_entity_mean_(std)'] = f'{mean} ({std})'
+                global_explain_stats[f'{key}_sparsity_per_entity_mean_(std)'] = f'{round(mean, 3)} ({round(std, 3)})'
                 # global_explain_stats[f'{key.split('_')[0:2]}_using_all_neighbours'] = value / 
             elif key.split('_')[2] == 'satisfied':
                 racio = value.count(True) / len(value)
-                global_explain_stats[f'{key}_racio'] = racio
+                global_explain_stats[f'{key}_racio'] = round(racio, 3)
 
         print(f'\n##########     Explainer Stats     ##########')
         for key, value in global_explain_stats.items():
