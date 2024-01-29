@@ -1299,8 +1299,12 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
             necessary_paths_best_expl_dict[entity] = necessary_path_to_best_explanation
             sufficient_paths_best_expl_dict[entity] = sufficient_path_to_best_explanation
 
+            [all_neighbours, all_neighbour_relation] = entity_to_neighbours[entity]
+            all_neighbours_qtt = len(all_neighbours)
+
             explain_stats['entities'].append(entity)
             explain_stats['explain_times'].append(explain_entity_time)
+            explain_stats['all_neighbours_qtt'].append(all_neighbours_qtt)
             explain_stats[f'necessary_len{max_len_explanations}_facts_qtt'].append(len(list(necessary_explan_dict.keys())[1]))
             explain_stats['necessary_len1_facts_qtt'].append(len(list(necessary_explan_len1_dict.keys())[1]))
             explain_stats[f'sufficient_len{max_len_explanations}_facts_qtt'].append(len(list(sufficient_explan_dict.keys())[1]))
@@ -1386,8 +1390,13 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
             # print(list(necessary_explan_dict.values())[1], '\n')
             # print(list(necessary_explan_dict))
             # print(len(list(necessary_explan_dict.keys())[1]))
+
+            [all_neighbours, all_neighbour_relation] = entity_to_neighbours[entity]
+            all_neighbours_qtt = len(all_neighbours)
+
             explain_stats['entities'].append(entity)
             explain_stats['explain_times'].append(explain_entity_time)
+            explain_stats['all_neighbours_qtt'].append(all_neighbours_qtt)
             explain_stats[f'necessary_len{max_len_explanations}_facts_qtt'].append(len(list(necessary_explan_dict.keys())[1]))
             explain_stats['necessary_len1_facts_qtt'].append(len(list(necessary_explan_len1_dict.keys())[1]))
             explain_stats[f'sufficient_len{max_len_explanations}_facts_qtt'].append(len(list(sufficient_explan_dict.keys())[1]))

@@ -739,14 +739,35 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
             if key == 'explain_times':
                 total_time = np.sum(value)
                 global_explain_stats[f'{key}_total'] = total_time
+            elif key == 'all_neighbours_qtt':
+                global_explain_stats[f'{key}'] = len(value)
             elif key.split('_')[-1] == 'qtt':
                 mean, std = np.mean(value), np.std(value)
-                global_explain_stats[f'{key}_mean'] = mean
-                global_explain_stats[f'{key}_std'] = std
-            elif key.split('_')[-2] == 'satisfied':
+                # global_explain_stats[f'{key}_mean'] = mean
+                # global_explain_stats[f'{key}_std'] = std
+                global_explain_stats[f'{key}_mean_(std)'] = f'{mean} ({std})'
+                dif = np.array(all_explain_stats['all_neighbours_qtt']) - np.array(value)
+                global_explain_stats[f'{key}_all_neighbours_used'] = np.count_nonzero(dif==0) / len(all_explain_stats['entities'])
+                ## this was I'm evaluating the sparsity of the global model so entities with few facts don't have so
+                ## much weight as with the other version of sparsity
+                global_explain_stats[f'{key}_global_sparsity'] = sum(value) / sum(all_explain_stats['all_neighbours_qtt'])
+                # using this way I'm calculating sparsity for each and then averaging, this means that entities where
+                # there are few facts sparsity will be high and influence more the global sparsity value
+                # print(np.array(value))
+                # print(np.array(value).shape)
+                # print(np.array(all_explain_stats['all_neighbours_qtt']))
+                # print(np.count_nonzero(dif==0))
+                # print(len(all_explain_stats['entities']))
+                # print(np.array(all_explain_stats['all_neighbours_qtt']).shape)
+                sparsity = np.array(value) / np.array(all_explain_stats['all_neighbours_qtt'])
+                mean, std = np.mean(sparsity), np.std(sparsity)
+                # global_explain_stats[f'{key}_sparsity_per_entity_mean'] = mean
+                # global_explain_stats[f'{key}_sparsity_per_entity_std'] = std
+                global_explain_stats[f'{key}_sparsity_per_entity_mean_(std)'] = f'{mean} ({std})'
+                # global_explain_stats[f'{key.split('_')[0:2]}_using_all_neighbours'] = value / 
+            elif key.split('_')[2] == 'satisfied':
                 racio = value.count(True) / len(value)
                 global_explain_stats[f'{key}_racio'] = racio
-
 
         print(f'\n##########     Explainer Stats     ##########')
         for key, value in global_explain_stats.items():
