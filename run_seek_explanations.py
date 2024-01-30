@@ -1581,7 +1581,7 @@ def compute_random(dataset_labels, ml_model, dic_emb_classes, entity_to_neighbou
             ## first if the remaining len was less or even zero I would use that, now if the len is less I always keep
             ## at least the same quantity of facts even if some are taken from the accepted explanations but starting
             ## with the worst explanations
-            keep_always_minimum_neighbours = True
+            keep_always_minimum_neighbours = False
             if keep_always_minimum_neighbours:
                 facts_deficit_in_remaining_neighbours = len(best_neighbours) - len(remaining_neighbours)
                 if facts_deficit_in_remaining_neighbours > 0:
@@ -1596,8 +1596,8 @@ def compute_random(dataset_labels, ml_model, dic_emb_classes, entity_to_neighbou
                 # print(len(random_facts))
             else:
                 sample_len = len(best_neighbours) if len(best_neighbours) < len(remaining_neighbours) else len(remaining_neighbours)
-                print(len(remaining_neighbours))
                 random_facts = random.sample(remaining_neighbours, sample_len)
+            # print(len(random_facts))
 
             avg_vectors = get_list_of_vectors_with_some_neighbours(dic_emb_classes, all_neighbours,
                                                                     random_facts, explan_type=explan_type)

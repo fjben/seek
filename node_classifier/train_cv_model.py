@@ -743,10 +743,8 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
                 global_explain_stats[f'neighbours_per_entity_mean_(std)'] = f'{round(mean, 3)} ({round(std, 3)})'
             elif key == 'explain_times':
                 total_time = np.sum(value)
-
                 ## this was just summing but with multiprocessing this means nothing because it is not real time
                 # global_explain_stats[f'{key}_total'] = round(total_time, 3) 
-                
                 mean, std = np.mean(value), np.std(value)
                 global_explain_stats[f'explain_time_per_entity_mean_(std)'] = f'{round(mean, 3)} ({round(std, 3)})'
             elif key.split('_')[3] == 'size':
@@ -820,6 +818,8 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
         df = pd.DataFrame([global_effectiveness_results_len1])
         df.to_csv(os.path.join(model_path, f'global_effectiveness_results_len1_{explanation_limit}_{model_type}.csv'), sep='\t')
     if all_effectiveness_results[0] or all_effectiveness_results[1]:
+        with open(os.path.join(model_path, f'all_explain_stats_{explanation_limit}.json'), 'w', encoding ='utf8') as f: 
+            json.dump(all_explain_stats, f, ensure_ascii = False)
         df = pd.DataFrame([global_explain_stats])
         df.to_csv(os.path.join(model_path, f'global_explain_stats_{explanation_limit}.csv'), sep='\t')
         with open(os.path.join(model_path, f'global_explain_stats_{explanation_limit}.json'), 'w', encoding ='utf8') as f: 
