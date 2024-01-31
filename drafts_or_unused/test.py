@@ -10,7 +10,8 @@ import pandas as pd
 import rdflib
 
 
-dataset='AIFB'
+# dataset='AIFB'
+dataset='AM_FROM_DGL'
 
 data_path = f'node_classifier/data/{dataset}'
 

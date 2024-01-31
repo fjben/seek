@@ -618,10 +618,12 @@ def get_list_of_vectors_with_some_neighbours(dic_emb_classes, all_neighbours, so
     return vectors
 
 
-def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original,
+def compute_one_round_of_candidate_neighbours(ml_model_extra, predicted_class_original,
                                                 pred_proba_predicted_class_original, threshold, dic_emb_classes,
                                                 n_embeddings, all_neighbours, current_neighbours_in_explanation,
                                                 candidate_neighbours, explan_type, entity):
+    
+    ml_model, lenc = ml_model_extra
     
     early_stop = False
 
@@ -651,7 +653,8 @@ def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original
         #     candidate_neighb
 
         new_predicted_class, new_predicted_class_num, new_pred_proba_predicted_class_original = get_new_score(ml_model, X_test, predicted_class_original, entity)
-        
+        if type(ml_model.estimator).__name__ == 'XGBClassifier':
+            new_predicted_class = lenc.inverse_transform([new_predicted_class])[0]
 
         if threshold == -1:
             if explan_type == 'necessary':
@@ -715,7 +718,7 @@ def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original
 
 ## necessary (backward)
 def wrapper_method_for_explanation_selection(
-        ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
+        ml_model_extra, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
         n_embeddings, all_neighbours, max_len_explanations, explan_type, entity):
     
     all_neigbours_set = set(all_neighbours)
@@ -736,7 +739,7 @@ def wrapper_method_for_explanation_selection(
         explanation_found, \
         current_neighbours_in_explanation, \
         current_best_explanation, \
-        current_explan = compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original,
+        current_explan = compute_one_round_of_candidate_neighbours(ml_model_extra, predicted_class_original,
                                                     pred_proba_predicted_class_original, threshold, dic_emb_classes,
                                                     n_embeddings, all_neighbours,
                                                     current_neighbours_in_explanation, candidate_neighbours,
@@ -906,9 +909,11 @@ def make_explan_dict(pred_proba_predicted_class_original, type_explan, all_neigh
 def explain(input_data): ## can remove label is not doing nothing here
     # entity, label, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model, threshold, max_len_explanations = \
     #     input_data
-    entity, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model, threshold, max_len_explanations = \
+    entity, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model_extra, threshold, max_len_explanations = \
         input_data
     tic = time.perf_counter()
+
+    ml_model, lenc = ml_model_extra
     # print(entity, label)
 
     # all_common_ancestors = list(nx.descendants(G, rdflib.term.URIRef(ent1)) & nx.descendants(G, rdflib.term.URIRef(ent2)))
@@ -944,6 +949,8 @@ def explain(input_data): ## can remove label is not doing nothing here
 
     X_test_original = [all_avg_vectors.tolist()]
     pred_original = ml_model.predict(X_test_original).tolist()[0]
+    if type(ml_model.estimator).__name__ == 'XGBClassifier':
+        pred_original = lenc.inverse_transform([pred_original])[0]
     pred_proba_original = ml_model.predict_proba(X_test_original).tolist()[0]
     predicted_class_original = np.argmax(pred_proba_original)
     pred_proba_predicted_class_original = pred_proba_original[predicted_class_original]
@@ -977,6 +984,8 @@ def explain(input_data): ## can remove label is not doing nothing here
 
         X_test_without_dca = [avg_vectors.tolist()]
         pred_without_dca = ml_model.predict(X_test_without_dca).tolist()[0]
+        # if type(ml_model.estimator).__name__ == 'XGBClassifier':
+        #     pred_without_dca = lenc.inverse_transform([pred_without_dca])[0]
         proba_pred_without_dca = ml_model.predict_proba(X_test_without_dca).tolist()[0]
         pred_proba_predicted_class_without_dca = proba_pred_without_dca[predicted_class_original]
         necessary_explan[neighbour] = pred_proba_predicted_class_without_dca
@@ -991,6 +1000,8 @@ def explain(input_data): ## can remove label is not doing nothing here
 
         X_test_only_dca = [dic_emb_classes[neighbour]]
         pred_only_dca = ml_model.predict(X_test_only_dca).tolist()[0]
+        # if type(ml_model.estimator).__name__ == 'XGBClassifier':
+        #     pred_without_dca = lenc.inverse_transform([pred_without_dca])[0]
         proba_pred_only_dca = ml_model.predict_proba(X_test_only_dca).tolist()[0]
         pred_proba_predicted_class_only_dca = proba_pred_only_dca[predicted_class_original]
         sufficient_explan[neighbour] = pred_proba_predicted_class_only_dca
@@ -1049,14 +1060,14 @@ def explain(input_data): ## can remove label is not doing nothing here
     # print('\n', entity, '\n')
 
     necessary_explan, necessary_explan_len1, necessary_path_to_best_explanation = wrapper_method_for_explanation_selection(
-        ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
+        ml_model_extra, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
         n_embeddings, all_neighbours, max_len_explanations, explan_type='necessary', entity=entity)
     
     # print('here nec')
     # print(necessary_explan)
     
     sufficient_explan, sufficient_explan_len1, sufficient_path_to_best_explanation = wrapper_method_for_explanation_selection(
-        ml_model, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
+        ml_model_extra, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
         n_embeddings, all_neighbours, max_len_explanations, explan_type='sufficient', entity=entity)
     
     # print('here suf')
@@ -1193,11 +1204,11 @@ def pool_handler_tqdm(pool_size, input_data, items, verbose):
 #                                  entity_to_neighbours_path, path_file_model, model_stats_path, path_explanations,
 #                                  max_len_explanations, n_embeddings=100):
 def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
-                                 entity_to_neighbours, ml_model, results_summary, path_explanations,
+                                 entity_to_neighbours, ml_model_extra, results_summary, path_explanations,
                                  max_len_explanations, explanation_limit, n_jobs, n_embeddings=100):
 
-    multiproc = True
-    # multiproc = False
+    # multiproc = True ## not working with XGBClassifier
+    multiproc = False
 
     # all_necessary_explan, all_sufficient_explan = [], []
 
@@ -1249,7 +1260,7 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
             [entity_to_neighbours] * num_items,
             [dic_emb_classes] * num_items,
             [n_embeddings] * num_items,
-            [ml_model] * num_items,
+            [ml_model_extra] * num_items,
             [threshold] * num_items,
             [max_len_explanations] * num_items,
         )
@@ -1328,7 +1339,7 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
         for (entity, label) in dataset_labels:
             # input_data = [entity, label, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model, threshold,
             #               max_len_explanations]
-            input_data = [entity, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model, threshold,
+            input_data = [entity, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model_extra, threshold,
                           max_len_explanations]
             # label, \
             # pred_original, \
@@ -1477,7 +1488,9 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
            [necessary_paths_best_expl_dict, sufficient_paths_best_expl_dict], \
             explain_stats
 
-def compute_random(dataset_labels, ml_model, dic_emb_classes, entity_to_neighbours, explanations_dicts):
+def compute_random(dataset_labels, ml_model_extra, dic_emb_classes, entity_to_neighbours, explanations_dicts):
+
+    ml_model, lenc = ml_model_extra
 
     n_embeddings = len(list(dic_emb_classes.values())[0])
 
@@ -1503,6 +1516,8 @@ def compute_random(dataset_labels, ml_model, dic_emb_classes, entity_to_neighbou
 
         X_test_original = [all_avg_vectors.tolist()]
         pred_original = ml_model.predict(X_test_original).tolist()[0]
+        if type(ml_model.estimator).__name__ == 'XGBClassifier':
+            pred_original = lenc.inverse_transform([pred_original])[0]
         pred_proba_original = ml_model.predict_proba(X_test_original).tolist()[0]
         predicted_class_original = np.argmax(pred_proba_original)
         pred_proba_predicted_class_original = pred_proba_original[predicted_class_original]
@@ -1613,6 +1628,8 @@ def compute_random(dataset_labels, ml_model, dic_emb_classes, entity_to_neighbou
             new_predicted_class, \
             new_predicted_class_num, \
             new_pred_proba_predicted_class_original = get_new_score(ml_model, X_test, predicted_class_original, entity)
+            if type(ml_model.estimator).__name__ == 'XGBClassifier':
+                new_predicted_class = lenc.inverse_transform([new_predicted_class])[0]
             predicted_classes_with_random.append(new_predicted_class)
         pred_eva_necessary.append(predicted_classes_with_random[0])
         pred_eva_sufficient.append(predicted_classes_with_random[1])

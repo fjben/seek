@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import pickle
 import random
 import shutil
 import sys
@@ -19,12 +20,13 @@ import pandas as pd
 
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import LabelEncoder
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold
 
 from pyrdf2vec import RDF2VecTransformer
-import xgboost
+from xgboost import XGBClassifier
 
 sys.path.append(os.path.realpath(os.path.join(os.path.abspath(__file__), os.path.pardir, os.path.pardir)))
 from utils.logger import Logger
@@ -370,14 +372,14 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
         # print(len(train_embeddings))
         # print(len(test_embeddings))
 
-        clf, results_summary, effectiveness_results, random_effectiveness_results, explain_stats = train_classifier(train_embeddings, train_labels, test_embeddings,
+        clf_extra, results_summary, effectiveness_results, random_effectiveness_results, explain_stats = train_classifier(train_embeddings, train_labels, test_embeddings,
                                                                        test_labels, test_entities, aproximate_model,
                                                                        entity_to_neighbours, dic_emb_classes,
                                                                        max_len_explanations, explanation_limit,
                                                                        current_model_path, n_jobs, RANDOM_STATE, 
                                                                        overwrite_invidivual_explanations=overwrite_invidivual_explanations)
 
-        save_model_results(dataset, clf, current_model_models_path, current_model_models_results_path, current_model_trained_path,
+        save_model_results(dataset, clf_extra, current_model_models_path, current_model_models_results_path, current_model_trained_path,
              results_summary)
         
         all_results_summary.append(results_summary)
@@ -530,17 +532,21 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
                      entity_to_neighbours, dic_emb_classes, max_len_explanations, explanation_limit,
                      current_model_path, n_jobs, RANDOM_STATE, overwrite_invidivual_explanations=False):
     
-    # Fit a Support Vector Machine on train embeddings and pick the best
-    # C-parameters (regularization strength).
-    param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## RandomForestClassifier()
-    param_grid = {
-                  'hidden_layer_sizes': [(100,), (50,50), (50,100,50)], ## MLPClassifier()
-                  'activation': ['tanh', 'relu'],
-                  'solver': ['sgd', 'adam'],
-                  # 'alpha': [0.0001, 0.05],
-                  # 'learning_rate': ['constant','adaptive'],
-                  }
+    # model = RandomForestClassifier(random_state=RANDOM_STATE)
+    # param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## RandomForestClassifier()
+
+    # model = MLPClassifier(random_state=RANDOM_STATE)
+    # param_grid = {
+    #               'hidden_layer_sizes': [(100,), (50,50), (50,100,50)], ## MLPClassifier()
+    #               'activation': ['tanh', 'relu'],
+    #               'solver': ['sgd', 'adam'],
+    #               # 'alpha': [0.0001, 0.05],
+    #               # 'learning_rate': ['constant','adaptive'],
+    #               }
+
+    model = XGBClassifier(random_state=RANDOM_STATE)
     param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## xgboost
+    
     scoring=['accuracy',
             'f1_weighted',
             'f1_macro',
@@ -550,14 +556,19 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
             'recall_macro'
             ]
     clf = GridSearchCV(
-        # SVC(random_state=RANDOM_STATE), {"C": [10**i for i in range(-3, 4)]}
-        RandomForestClassifier(random_state=RANDOM_STATE),
-        # MLPClassifier(),
-        # xgboost(),
+        model,
         param_grid,
         scoring=scoring,
         refit='f1_weighted'
     )
+
+    if type(clf.estimator).__name__ == 'XGBClassifier':
+        lenc = LabelEncoder()
+        lenc.fit(train_labels)
+        train_labels = lenc.transform(train_labels)
+        test_labels = lenc.transform(test_labels)
+    else:
+        lenc = None
 
     tic = time.perf_counter()
     clf.fit(train_embeddings, train_labels)
@@ -607,6 +618,10 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         'std_preds': std_preds
     }
 
+    if type(clf.estimator).__name__ == 'XGBClassifier':
+        test_labels = lenc.inverse_transform(test_labels)
+    clf_extra = [clf, lenc]
+
     if aproximate_model:
         dataset_labels = list(zip(test_entities, test_labels))
         path_explanations = os.path.join(current_model_path, 'explanations')
@@ -623,13 +638,13 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         effectiveness_results, \
         explanations_dicts, \
         paths_to_explanations, \
-        explain_stats = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf,
+        explain_stats = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf_extra,
                                                      results_summary, path_explanations, max_len_explanations,
                                                      explanation_limit, n_jobs)
         save_effectiveness_results(path_explanations, max_len_explanations, effectiveness_results,
                                    paths_to_explanations, explanations_dicts, path_individual_explanations)
         
-        random_effectiveness_results = compute_random(dataset_labels, clf, dic_emb_classes, entity_to_neighbours, explanations_dicts)
+        random_effectiveness_results = compute_random(dataset_labels, clf_extra, dic_emb_classes, entity_to_neighbours, explanations_dicts)
         # print(random_effectiveness_results)
         # raise
 
@@ -650,14 +665,19 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         random_effectiveness_results = [False, False]
         explain_stats = False
 
-    return clf, results_summary, effectiveness_results, random_effectiveness_results, explain_stats
+    return clf_extra, results_summary, effectiveness_results, random_effectiveness_results, explain_stats
 
 
-def save_model_results(dataset, clf, current_model_models_path, current_model_models_results_path, current_model_trained_path,
+def save_model_results(dataset, clf_extra, current_model_models_path, current_model_models_results_path, current_model_trained_path,
              results_summary):
     # transformer.save(os.path.join(current_model_models_path, f'RDF2Vec_{dataset}')) ## save transformer model
 
+    clf, lenc = clf_extra
     dump(clf, os.path.join(current_model_models_path, f'classifier_{dataset}')) ## save node classification model
+
+    if lenc:
+        with open(os.path.join(current_model_models_path, f'lenc_{dataset}.pickle'), 'wb') as file:
+            pickle.dump(lenc, file, pickle.HIGHEST_PROTOCOL)
 
     ## save grid search cv results although they are also saved with the joblib.dump
     df = pd.DataFrame(clf.cv_results_)
@@ -668,6 +688,8 @@ def save_model_results(dataset, clf, current_model_models_path, current_model_mo
             json.dump(str(clf.best_estimator_), f, ensure_ascii = False)
 
     ## save results summary for test set
+    # print(results_summary)
+    results_summary = {key: str(value) for key, value in results_summary.items()}
     with open(os.path.join(current_model_models_results_path, 'results_summary.json'), 'w', encoding ='utf8') as f: 
             json.dump(results_summary, f, ensure_ascii = False)
     df = pd.DataFrame([results_summary])

@@ -12,17 +12,24 @@ import matplotlib.pyplot as plt
 
 import networkx as nx
 import rdflib
-from rdflib.extras.external_graph_libs import rdflib_to_networkx_multidigraph
+from rdflib.extras.external_graph_libs import rdflib_to_networkx_multidigraph, rdflib_to_networkx_graph
 
 
-dataset='AIFB'
+# dataset = 'AIFB'
+dataset = 'AM_FROM_DGL'
 kge_model = 'RDF2Vec'
 
 # explanation_type = ('necessary', 'len1', 'threshold')
 # instance_to_explore = ['id4instance', {'location': 'AIFB_model_7_RAN'}]
 
-explanation_type = ('necessary', 'len5', 'class_change')
-instance_to_explore = ['id2056instance', {'location': 'AIFB_model_4_RAN'}]
+# explanation_type = ('necessary', 'len5', 'class_change')
+# instance_to_explore = ['id2056instance', {'location': 'AIFB_model_4_RAN'}]
+
+# explanation_type = ('sufficient', 'len5', 'threshold')
+# instance_to_explore = ['id2133instance', {'location': 'AIFB_model_2_RAN'}]
+
+explanation_type = ('sufficient', 'len5', 'class_change')
+instance_to_explore = ['proxy-28901', {'location': 'AM_FROM_DGL_model_0_RAN'}]
 
 
 data_path = f'node_classifier/data/{dataset}'
@@ -44,7 +51,10 @@ with open(load_path, 'r') as f:
         explanation_rows.append(row)
 
 all_neighb_predicted_class = explanation_rows[-1][3]
-best_explanation = explanation_rows[-1][5:]
+if explanation_type[0] == 'necessary':
+    best_explanation = explanation_rows[-1][5:]
+if explanation_type[0] == 'sufficient':
+    best_explanation = explanation_rows[0][5:]
 print('\nall_neighb_predicted_class: ', all_neighb_predicted_class)
 # print(best_explanation)
 # raise
@@ -72,17 +82,24 @@ target_predicate = ds_metadata['target_predicate']
 
 ##### load rdf graph and convert to networkx
 grph = rdflib.Graph().parse(location)
-Grph = rdflib_to_networkx_multidigraph(grph)
+# Grph = rdflib_to_networkx_multidigraph(grph)
+Grph = rdflib_to_networkx_graph(grph)
 # print(Grph.nodes())
 
 # for train_entity, train_label in zip(train_entities, train_labels):
 for entity, label in zip(entities, labels):
+    # Grph.add_edge(
+    #     # rdflib.term.URIRef(train_entity),
+    #     # rdflib.term.URIRef(train_label),
+    #     rdflib.term.URIRef(entity),
+    #     rdflib.term.URIRef(label),
+    #     key=rdflib.term.URIRef(target_predicate)        
+    # )
     Grph.add_edge(
         # rdflib.term.URIRef(train_entity),
         # rdflib.term.URIRef(train_label),
         rdflib.term.URIRef(entity),
-        rdflib.term.URIRef(label),
-        key=rdflib.term.URIRef(target_predicate)        
+        rdflib.term.URIRef(label),       
     )
 
 tail_list = []
