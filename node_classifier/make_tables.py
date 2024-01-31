@@ -33,8 +33,8 @@ kge_model = args.kge_model
 # dataset = 'AM_FROM_DGL'
 # dataset = 'MDGENRE'
 
-main_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model'
-# main_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_backup_latest'
+# main_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model'
+main_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_backup_latest'
 
 
 ############################################################################### functions
@@ -725,27 +725,6 @@ df_final_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_process
 
 
 
-# max_len_explanations = 5
-# explanation_limit = 'threshold'
-# df_final = create_df_from_global_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations, explanation_limit=explanation_limit)
-# print('\n', df_final)
-# df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
-
-# max_len_explanations = 1
-# explanation_limit = 'class_change'
-# df_final = create_df_from_global_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations, explanation_limit=explanation_limit)
-# print('\n', df_final)
-# df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
-
-# max_len_explanations = 5
-# explanation_limit = 'class_change'
-# df_final = create_df_from_global_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations, explanation_limit=explanation_limit)
-# print('\n', df_final)
-# df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
-
-
-
-
 ## be careful because model type is name if dataframe manually
 model_type = 'RO'
 load_path = f'{main_path}/{dataset}_{kge_model}/global_results_{model_type}'
@@ -760,23 +739,29 @@ df_final_RAN = create_df_from_global_classifier_results(load_path=load_path, dat
 # df_final_RAN.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_results_{model_type}.csv', index=False, sep='\t')
 
 
+model_type = 'RO'
 load_path = f'{main_path}/{dataset}_{kge_model}/all_results_{model_type}'
 df_RO = create_df_from_classifier_results(load_path, dataset, 'RO')
-# print('\n', df_RO)
+print('\n', df_RO)
+model_type = 'RAN'
 load_path = f'{main_path}/{dataset}_{kge_model}/all_results_{model_type}'
 df_RAN = create_df_from_classifier_results(load_path, dataset, 'RAN')
-# print('\n', df_RAN)
+print('\n', df_RAN)
 
+print('HEREEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE')
 results = []
 for column in df_RO.columns:
-    # print(column)
+    print(column)
+    print(df_RO[column].values)
+    print(df_RAN[column].values)
     if np.sum(df_RO[column].values - df_RAN[column].values) == 0:
         ## ValueError: zero_method 'wilcox' and 'pratt' do not work if x - y is zero for all elements.
         results.append('x[i]-y[i]=0')
+        print('RESULTS', 'x[i]-y[i]=0')
     else:
         # print(df_RO[column].values)
         res = wilcoxon(df_RO[column].values, df_RAN[column].values) #, alternative='greater')
-        # print('RESULTS', res)
+        print('RESULTS', res)
         results.append("{:.2e}".format(res[1]))
         # results.append(res[1])
 print(results)
@@ -807,3 +792,27 @@ df_final_RO_RAN.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_proces
 # else:
 #     res = wilcoxon(original_accuracy_scores, sufficient_accuracy_scores, alternative='greater')
 #     print('\n', res)
+
+
+
+
+# max_len_explanations = 5
+# explanation_limit = 'threshold'
+# df_final = create_df_from_global_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations, explanation_limit=explanation_limit)
+# print('\n', df_final)
+# df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
+
+# max_len_explanations = 1
+# explanation_limit = 'class_change'
+# df_final = create_df_from_global_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations, explanation_limit=explanation_limit)
+# print('\n', df_final)
+# df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
+
+# max_len_explanations = 5
+# explanation_limit = 'class_change'
+# df_final = create_df_from_global_effectiveness_results(dataset=dataset, max_len_explanations=max_len_explanations, explanation_limit=explanation_limit)
+# print('\n', df_final)
+# df_final.to_csv(f'/home/fpaulino/SEEK/seek/node_classifier/results_processed/{dataset}/processed_global_effectiveness_results_len{max_len_explanations}_{explanation_limit}_RAN.csv', sep='\t')
+
+
+

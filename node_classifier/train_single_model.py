@@ -19,12 +19,10 @@ import pandas as pd
 
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 from sklearn.model_selection import GridSearchCV
-from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold
 
 from pyrdf2vec import RDF2VecTransformer
-import xgboost
 
 sys.path.append(os.path.realpath(os.path.join(os.path.abspath(__file__), os.path.pardir, os.path.pardir)))
 from utils.logger import Logger
@@ -73,10 +71,13 @@ max_len_explanations=5
 # best_embeddings_params = True
 # best_embeddings_params = False
 
-n_splits = 10
+# n_splits = 10
 # n_splits = 2
+n_splits = 1
 
 verbose = 1
+
+original_partitions = True
 
 
 ############################################################################### logging
@@ -145,6 +146,32 @@ def run_partition(entities, labels, filename_output, n_splits, random_state):
         file_crossValidation_train.close()
         file_crossValidation_test.close()
         index_partition = index_partition + 1
+
+    return train_index_files_designation, test_index_files_designation
+
+def original_train_test_partition(train_entities, test_entities, filename_output):
+    index_partition = 0
+    indexes_partition_train = list(range(len(train_entities)))
+    indexes_partition_test = list(range(len(train_entities), len(train_entities + test_entities)))
+    # print(indexes_partition_train)
+    # print('\n', indexes_partition_test)
+    # raise
+    
+    # data_partitions_path = os.path.join(filename_output, 'data_partitions')
+    data_partitions_path = os.path.join(filename_output)
+    ensure_dir(data_partitions_path, option='overwrite')
+    train_index_files_designation = os.path.join(data_partitions_path, 'Indexes_crossvalidationTrain_Run')
+    test_index_files_designation = os.path.join(data_partitions_path, 'Indexes_crossvalidationTest_Run')
+
+    file_crossValidation_train = open(train_index_files_designation + str(index_partition) + '.txt', 'w')
+    file_crossValidation_test = open(test_index_files_designation + str(index_partition) + '.txt', 'w')
+    for index in indexes_partition_train:
+        file_crossValidation_train.write(str(index) + '\n')
+    for index in indexes_partition_test:
+        file_crossValidation_test.write(str(index) + '\n')
+    file_crossValidation_train.close()
+    file_crossValidation_test.close()
+    index_partition = index_partition + 1
 
     return train_index_files_designation, test_index_files_designation
 
@@ -226,7 +253,8 @@ cpu_num = cpu_count()
 data_path = f'node_classifier/data/{dataset}'
 model_path = f'node_classifier/cv_model/{dataset}_{kge_model}'
 # model_path = f'node_classifier/cv_model_test/{dataset}_{kge_model}'
-model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions'
+# model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions'
+model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions_original_train_test'
 if kge_model == 'RDF2Vec':
     transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
 entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/entity_to_neighbours.json'
@@ -304,7 +332,10 @@ print("Number of used cpu:\t", n_jobs, '\n')
 ## before was partitioning every time, now fixed partitions
 # train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_path, n_splits, RANDOM_STATE)
 if not os.listdir(model_data_partitions_path):
-    train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_data_partitions_path, n_splits, RANDOM_STATE)
+    if original_partitions:
+        train_index_files_designation, test_index_files_designation = original_train_test_partition(train_entities, test_entities, model_data_partitions_path)
+    else:
+        train_index_files_designation, test_index_files_designation = run_partition(entities, labels, model_data_partitions_path, n_splits, RANDOM_STATE)
 else:
     ensure_dir(model_data_partitions_path, 'make_if_not_exists')
     train_index_files_designation = os.path.join(model_data_partitions_path, 'Indexes_crossvalidationTrain_Run')
@@ -532,15 +563,7 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
     
     # Fit a Support Vector Machine on train embeddings and pick the best
     # C-parameters (regularization strength).
-    param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## RandomForestClassifier()
-    param_grid = {
-                  'hidden_layer_sizes': [(100,), (50,50), (50,100,50)], ## MLPClassifier()
-                  'activation': ['tanh', 'relu'],
-                  'solver': ['sgd', 'adam'],
-                  # 'alpha': [0.0001, 0.05],
-                  # 'learning_rate': ['constant','adaptive'],
-                  }
-    param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## xgboost
+    param_grid = {"max_depth": [2, 4, 6, 8, 10]}
     scoring=['accuracy',
             'f1_weighted',
             'f1_macro',
@@ -552,8 +575,6 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
     clf = GridSearchCV(
         # SVC(random_state=RANDOM_STATE), {"C": [10**i for i in range(-3, 4)]}
         RandomForestClassifier(random_state=RANDOM_STATE),
-        # MLPClassifier(),
-        # xgboost(),
         param_grid,
         scoring=scoring,
         refit='f1_weighted'

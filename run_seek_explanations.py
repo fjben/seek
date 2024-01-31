@@ -626,7 +626,7 @@ def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original
     early_stop = False
 
     candidate_neighbours_results = dict()
-    current_neighbours_in_explanation = list(current_neighbours_in_explanation)
+    # current_neighbours_in_explanation = list(current_neighbours_in_explanation)
     candidate_neighbours = list(candidate_neighbours)
     # print(type(candidate_neighbours))
     # print('current_neighbours_in_explanation')
@@ -672,10 +672,12 @@ def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original
 
         if early_stop:
             if explan_type == 'necessary' and explanation_found:
-                current_best_neighbours = set(min(candidate_neighbours_results.items(), key=lambda x: x[1][0])[0])
+                # current_best_neighbours = set(min(candidate_neighbours_results.items(), key=lambda x: x[1][0])[0])
+                current_best_neighbours = list(min(candidate_neighbours_results.items(), key=lambda x: x[1][0])[0])
                 return explanation_found, current_best_neighbours, candidate_neighbours_results
             elif explan_type == 'sufficient' and explanation_found:
-                current_best_neighbours = set(max(candidate_neighbours_results.items(), key=lambda x: x[1][0])[0])
+                # current_best_neighbours = set(max(candidate_neighbours_results.items(), key=lambda x: x[1][0])[0])
+                current_best_neighbours = list(max(candidate_neighbours_results.items(), key=lambda x: x[1][0])[0])
                 return explanation_found, current_best_neighbours, candidate_neighbours_results
             ## with the combined bool test, if an explanation was not found it raised the exception but we want the
             ## code to keep running
@@ -689,7 +691,8 @@ def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original
 
     if explan_type == 'necessary':
         current_best_explanation = min(candidate_neighbours_results.items(), key=lambda x: x[1][0])
-        current_best_neighbours = set(current_best_explanation[0])
+        # current_best_neighbours = set(current_best_explanation[0])
+        current_best_neighbours = list(current_best_explanation[0])
         # explanation_found = True if pred_proba_predicted_class_original - pred_proba_predicted_class >= threshold else False
         # print('here in explanation_found check')
         # print(list(min(candidate_neighbours_results.items(), key=lambda x: x[1][0]))[1][1])
@@ -699,7 +702,8 @@ def compute_one_round_of_candidate_neighbours(ml_model, predicted_class_original
         # print('candidate_neighbours_results')
         # print(candidate_neighbours_results.items())
         current_best_explanation = max(candidate_neighbours_results.items(), key=lambda x: x[1][0])
-        current_best_neighbours = set(current_best_explanation[0])
+        # current_best_neighbours = set(current_best_explanation[0])
+        current_best_neighbours = list(current_best_explanation[0])
         # explanation_found = True if pred_proba_predicted_class_original - pred_proba_predicted_class <= threshold else False
         ## explanation_found is set to True if the best explanation so far has a value of True
         explanation_found = list(current_best_explanation)[1][1]
@@ -720,6 +724,7 @@ def wrapper_method_for_explanation_selection(
     wrapper_explan_len1 = dict()
     
     current_neighbours_in_explanation = set()
+    current_neighbours_in_explanation = list()
     candidate_neighbours = set(all_neighbours)
     path_to_best_explanation = []
     explan_len1 = True
@@ -751,7 +756,8 @@ def wrapper_method_for_explanation_selection(
             # print('here')
             break
 
-        candidate_neighbours = all_neigbours_set.difference(current_neighbours_in_explanation)
+        current_neighbours_in_explanation_set = set(current_neighbours_in_explanation)
+        candidate_neighbours = all_neigbours_set.difference(current_neighbours_in_explanation_set)
 
         # i += 1
         # if i == 5:
