@@ -226,7 +226,7 @@ def stats_for_preds(predictions_proba):
 cpu_num = cpu_count()
 
 data_path = f'node_classifier/data/{dataset}'
-model_path = f'node_classifier/cv_model/{dataset}_{kge_model}'
+model_path = f'node_classifier/cv_model_xgboost/{dataset}_{kge_model}'
 # model_path = f'node_classifier/cv_model_test/{dataset}_{kge_model}'
 model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions'
 if kge_model == 'RDF2Vec':
@@ -532,8 +532,8 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
                      entity_to_neighbours, dic_emb_classes, max_len_explanations, explanation_limit,
                      current_model_path, n_jobs, RANDOM_STATE, overwrite_invidivual_explanations=False):
     
-    model = RandomForestClassifier(random_state=RANDOM_STATE)
-    param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## RandomForestClassifier()
+    # model = RandomForestClassifier(random_state=RANDOM_STATE)
+    # param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## RandomForestClassifier()
 
     # model = MLPClassifier(random_state=RANDOM_STATE)
     # param_grid = {
@@ -544,8 +544,8 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
     #               # 'learning_rate': ['constant','adaptive'],
     #               }
 
-    # model = XGBClassifier(random_state=RANDOM_STATE)
-    # param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## xgboost
+    model = XGBClassifier(random_state=RANDOM_STATE)
+    param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## xgboost
     
     scoring=['accuracy',
             'f1_weighted',

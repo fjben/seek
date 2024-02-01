@@ -1207,8 +1207,12 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
                                  entity_to_neighbours, ml_model_extra, results_summary, path_explanations,
                                  max_len_explanations, explanation_limit, n_jobs, n_embeddings=100):
 
-    # multiproc = True ## not working with XGBClassifier
-    multiproc = False
+    multiproc = True ## not working with XGBClassifier
+    # multiproc = False
+
+    ml_model, lenc = ml_model_extra
+    if type(ml_model.estimator).__name__ == 'XGBClassifier':
+        multiproc = False
 
     # all_necessary_explan, all_sufficient_explan = [], []
 
@@ -1457,12 +1461,63 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
     # with open('temp2_pred_eva_sufficient_len1', 'a') as f:
     #     f.write('\n'.join(pred_eva_sufficient_len1))
     #     f.write('\n')
+    # ignore_all_neighbours_explanations = True
+    ignore_all_neighbours_explanations = False
 
-    effectiveness_results_lenx = compute_performance_metrics_v2(labels, original_pred_eva,
-                                                           pred_eva_necessary, pred_eva_sufficient)
-    
-    effectiveness_results_len1 = compute_performance_metrics_v2(labels, original_pred_eva,
-                                                           pred_eva_necessary_len1, pred_eva_sufficient_len1)
+    if ignore_all_neighbours_explanations:
+
+        facts_size_lenx_keys = [f'necessary_len{max_len_explanations}_facts_size',
+                                f'sufficient_len{max_len_explanations}_facts_size']
+        entity_to_remove_idx = []
+        print('\n')
+        for key in facts_size_lenx_keys:
+            indexes_found_in_key = []
+            for idx, (all_n_size, expl_size) in enumerate(zip(explain_stats['all_neighbours_size'], explain_stats[key])):
+                if all_n_size == expl_size:
+                    entity_to_remove_idx.append(idx)
+                    indexes_found_in_key.append(idx)
+            print(f'{key} ent indxs w/ all neighs in explanation: ', indexes_found_in_key)
+
+        entity_to_remove_idx = list(set(entity_to_remove_idx))
+        # print(len(labels))
+        labels_filtered = [lab for idx, lab in enumerate(labels) if idx not in entity_to_remove_idx]
+        original_pred_eva_filtered = [lab for idx, lab in enumerate(original_pred_eva) if idx not in entity_to_remove_idx]
+        pred_eva_necessary_filtered = [lab for idx, lab in enumerate(pred_eva_necessary) if idx not in entity_to_remove_idx]
+        pred_eva_sufficient_filtered = [lab for idx, lab in enumerate(pred_eva_sufficient) if idx not in entity_to_remove_idx]
+        # print(len(labels_filtered))
+
+        effectiveness_results_lenx = compute_performance_metrics_v2(labels_filtered, original_pred_eva_filtered,
+                                                            pred_eva_necessary_filtered, pred_eva_sufficient_filtered)
+        
+        facts_size_len1_keys = ['necessary_len1_facts_size',
+                                'sufficient_len1_facts_size']
+        entity_to_remove_idx = []
+        print('\n')
+        for key in facts_size_len1_keys:
+            indexes_found_in_key = []
+            for idx, (all_n_size, expl_size) in enumerate(zip(explain_stats['all_neighbours_size'], explain_stats[key])):
+                if all_n_size == expl_size:
+                    entity_to_remove_idx.append(idx)
+                    indexes_found_in_key.append(idx)
+            print(f'{key} ent indxs w/ all neighs in explanation: ', indexes_found_in_key)
+
+        entity_to_remove_idx = list(set(entity_to_remove_idx))
+        # print(len(labels))
+        labels_filtered = [lab for idx, lab in enumerate(labels) if idx not in entity_to_remove_idx]
+        original_pred_eva_filtered = [lab for idx, lab in enumerate(original_pred_eva) if idx not in entity_to_remove_idx]
+        pred_eva_necessary_len1_filtered = [lab for idx, lab in enumerate(pred_eva_necessary_len1) if idx not in entity_to_remove_idx]
+        pred_eva_sufficient_len1_filtered = [lab for idx, lab in enumerate(pred_eva_sufficient_len1) if idx not in entity_to_remove_idx]
+        # print(len(labels_filtered))
+
+        effectiveness_results_len1 = compute_performance_metrics_v2(labels_filtered, original_pred_eva_filtered,
+                                                            pred_eva_necessary_len1_filtered, pred_eva_sufficient_len1_filtered)
+        
+    else:
+        effectiveness_results_lenx = compute_performance_metrics_v2(labels, original_pred_eva,
+                                                            pred_eva_necessary, pred_eva_sufficient)
+        
+        effectiveness_results_len1 = compute_performance_metrics_v2(labels, original_pred_eva,
+                                                            pred_eva_necessary_len1, pred_eva_sufficient_len1)
     # effectiveness_results_lenx, effectiveness_results_len1 = None, None
 
     # original_waf_necc, original_pr_necc, original_re_necc = compute_performance_metrics(original_pred_eva_necessary,y_eva_necessary)
