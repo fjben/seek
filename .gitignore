@@ -11,6 +11,7 @@ node_classifier/cv_model_backup
 node_classifier/cv_model_backup_latest
 node_classifier/cv_model_data_partitions
 node_classifier/cv_model_data_partitions_backup
+node_classifier/cv_model_mlp
 node_classifier/cv_model_single_test_explanations
 node_classifier/cv_model_with_time_stats
 node_classifier/cv_model_test

@@ -1,3 +1,6 @@
+
+
+
 import json
 import random
 import os
@@ -44,272 +47,6 @@ def ensure_dir(path):
     d = os.path.dirname(path)
     if not os.path.exists(d):
         os.makedirs(d)
-
-# def _identity(x): return x
-
-# def _rdflib_to_networkx_graph(
-#         graph,
-#         nxgraph,
-#         calc_weights,
-#         edge_attrs,
-#         transform_s=_identity, transform_o=_identity):
-#     """Helper method for multidigraph, digraph and graph.
-#     Modifies nxgraph in-place!
-#     Arguments:
-#         graph: an rdflib.Graph.
-#         nxgraph: a networkx.Graph/DiGraph/MultiDigraph.
-#         calc_weights: If True adds a 'weight' attribute to each edge according
-#             to the count of s,p,o triples between s and o, which is meaningful
-#             for Graph/DiGraph.
-#         edge_attrs: Callable to construct edge data from s, p, o.
-#            'triples' attribute is handled specially to be merged.
-#            'weight' should not be generated if calc_weights==True.
-#            (see invokers below!)
-#         transform_s: Callable to transform node generated from s.
-#         transform_o: Callable to transform node generated from o.
-#     """
-#     assert callable(edge_attrs)
-#     assert callable(transform_s)
-#     assert callable(transform_o)
-#     import networkx as nx
-#     for s, p, o in graph:
-#         if p == RDFS.subClassOf or p==rdflib.term.URIRef('http://hasAnnotation'):
-#             ts, to = transform_s(s), transform_o(o)  # apply possible transformations
-#             data = nxgraph.get_edge_data(ts, to)
-#             if data is None or isinstance(nxgraph, nx.MultiDiGraph):
-#                 # no edge yet, set defaults
-#                 data = edge_attrs(s, p, o)
-#                 if calc_weights:
-#                     data['weight'] = 1
-#                 nxgraph.add_edge(ts, to, **data)
-#             else:
-#                 # already have an edge, just update attributes
-#                 if calc_weights:
-#                     data['weight'] += 1
-#                 if 'triples' in data:
-#                     d = edge_attrs(s, p, o)
-#                     data['triples'].extend(d['triples'])
-
-# def process_GO_annotations(annotations_file_path):
-
-#     file_annot = open(annotations_file_path, 'r')
-#     file_annot.readline()
-#     dic_annotations = {}
-#     for annot in file_annot:
-#         list_annot = annot.split('\t')
-#         id_prot, GO_term = list_annot[1], list_annot[4]
-
-#         url_GO_term = "http://purl.obolibrary.org/obo/GO_" + GO_term.split(':')[1]
-
-#         if url_GO_term == 'http://purl.obolibrary.org/obo/GO_0044212':
-#             print(annot)
-
-#         url_prot = id_prot
-
-#         if url_prot not in dic_annotations:
-#             dic_annotations[url_prot] = [url_GO_term]
-#         else:
-#             dic_annotations[url_prot] = dic_annotations[url_prot] + [url_GO_term]
-#     file_annot.close()
-#     return dic_annotations
-
-
-# def process_HP_annotations(annotations_file_path):
-#     file_annot = open(annotations_file_path, 'r')
-#     file_annot.readline()
-#     dic_annotations = {}
-#     for annot in file_annot:
-#         list_annot = annot[:-1].split('\t')
-#         id_ent, HPO_term = list_annot[0], list_annot[1]
-
-#         url_HPO_term = 'http://purl.obolibrary.org/obo/HP_' + HPO_term
-#         url_ent = id_ent
-
-#         if url_ent not in dic_annotations:
-#             dic_annotations[url_ent] = [url_HPO_term]
-#         else:
-#             dic_annotations[url_ent] = dic_annotations[url_ent] + [url_HPO_term]
-
-#     file_annot.close()
-#     return dic_annotations
-
-
-# def add_annotations(g, dic_annotations):
-#     for ent in dic_annotations:
-#         for a in dic_annotations[ent]:
-#             g.add((rdflib.term.URIRef(ent), rdflib.term.URIRef('http://hasAnnotation'),rdflib.term.URIRef(a)))
-#     return g
-
-
-# def construct_kg(ontology_file_path, annotations_file_path, type_dataset='PPI'):
-#     if type_dataset == "PPI":
-#         dic_annotations = process_GO_annotations(annotations_file_path)
-#     elif type_dataset == "GDA":
-#         dic_annotations = process_HP_annotations(annotations_file_path)
-#     g_ontology = rdflib.Graph()
-#     g_ontology.parse(ontology_file_path, format="xml")
-#     dic_labels_classes = {}
-#     for (sub, pred, obj) in g_ontology.triples((None, RDFS.label, None)):
-#         dic_labels_classes[str(sub)] = str(obj)
-#     return add_annotations(g_ontology, dic_annotations), dic_labels_classes
-
-
-# def process_indexes_partition(file_partition):
-#     """
-#     Process the partition file and returns a list of indexes.
-#     :param file_partition: partition file path (each line is a index);
-#     :return: list of indexes.
-#     """
-#     file_partitions = open(file_partition, 'r')
-#     indexes_partition = []
-#     for line in file_partitions:
-#         indexes_partition.append(int(line[:-1]))
-#     file_partitions.close()
-#     return indexes_partition
-
-
-# def process_dataset(path_dataset_file):
-#     """
-#     """
-#     list_labels = []
-#     with open(path_dataset_file, 'r') as dataset:
-#         for line in dataset:
-#             split1 = line.split('\t')
-#             ent1, ent2 = split1[0], split1[1]
-#             label = int(split1[2][:-1])
-#             list_labels.append([(ent1, ent2), label])
-#     return list_labels
-
-
-# def bar_plot(df, df_without, df_only, n_ancestors, prob_class, num_classes, output):
-#     baseline = 1/num_classes
-
-#     cm = 1 / 2.54
-#     fig, ax = plt.subplots()
-#     #plt.figure(figsize=((1 * n_ancestors + 1.5) * cm, 9 * cm))
-#     fig.set_size_inches(10, 8)
-#     #plt.figure(figsize=(5, n_ancestors*2+3))
-#     sns.set_color_codes("pastel")
-
-#     df_without['value'] = [x-baseline if x>baseline else -(1-x)+baseline for x in df_without[prob_class]]
-#     list_colors_without=[]
-#     for x in df_without['value']:
-#         if x < 0:
-#             z='#FF5050'
-#         elif x==0:
-#             z="#FFFFFF"
-#         else:
-#             z='#70BB83'
-#         list_colors_without.append(z)
-#     df_without['colors'] = list_colors_without
-
-#     df_only['value'] = [float(x)-baseline if x > baseline else -(1-x)+baseline for x in df_only[prob_class]]
-#     list_colors_only = []
-#     for x in df_only['value']:
-#         if x < 0:
-#             z = '#FF5050'
-#         elif x== 0:
-#             z = "#FFFFFF"
-#         else:
-#             z = '#70BB83'
-#         list_colors_only.append(z)
-#     df_only['colors'] = list_colors_only
-
-#     df['value'] = [float(x)-baseline if x > baseline else -(1-x)+baseline for x in df[prob_class]]
-#     df['colors'] = ['#FF5050' if x < 0 else '#70BB83' for x in df['value']]
-
-#     ax.hlines(y=df.neighbour, xmin=0, xmax=df.value, color=df['colors'], alpha=0.8, linewidth=2.5)
-#     for x, y, tex in zip(df.value, df.neighbour, df.value):
-#         if len(y) > 2:
-#             t = ax.text(x, y, round(abs(tex) + baseline, 2), horizontalalignment='right' if x < 0 else 'left',
-#                         verticalalignment='center',
-#                         fontdict={'color': '#FF5050' if x < 0 else '#70BB83', 'size': 9})
-
-#     ax.hlines(y=df_without.neighbour, xmin=0, xmax=df_without.value, color=df_without['colors'], alpha=0.8, linewidth=2.5)
-#     for x, y, tex in zip(df_without.value, df_without.neighbour, df_without.value):
-#         if len(y)>2:
-#             t = ax.text(x, y, round(abs(tex) + baseline, 2), horizontalalignment='right' if x < 0 else 'left',
-#                         verticalalignment='center',
-#                         fontdict={'color': '#FF5050' if x < 0 else '#70BB83', 'size': 9})
-
-#     ax.hlines(y=df_only.neighbour, xmin=0, xmax=df_only.value, color=df_only['colors'], alpha=0.8, linewidth=2.5)
-#     for x, y, tex in zip(df_only.value, df_only.neighbour, df_only.value):
-#         if len(y)>2:
-#             t = ax.text(x, y, round(abs(tex) + baseline, 2), horizontalalignment='right' if x < 0 else 'left',
-#                         verticalalignment='center',
-#                         fontdict={'color': '#FF5050' if x < 0 else '#70BB83', 'size': 9})
-
-#     ax.set_xlim(-0.7,0.7)
-#     ax.set_xticks((-0.5, -0.25, 0, 0.25, 0.5))
-#     ax.set_xticklabels(("1","0.75", "0.5", "0.75", "1"))
-
-#     fig.show()
-#     fig.savefig(output, bbox_inches='tight')
-#     plt.close('all')
-
-
-# def process_representation_file(path_file_representation):
-#     """
-#     """
-#     dict_representation = {}
-#     with open(path_file_representation, 'r') as file_representation:
-#         for line in file_representation:
-#             line = line[:-1]
-#             split1 = line.split('\t')
-#             ent1 = split1[0].split('/')[-1]
-#             ent2 = split1[1].split('/')[-1]
-#             feats = split1[2:]
-#             feats_floats = [float(i) for i in feats]
-#             dict_representation[(ent1, ent2)] =  feats_floats
-#     return dict_representation
-
-
-# def read_representation_dataset_file(path_file_representation, path_dataset_file):
-#     """
-#     """
-#     list_representation, labels, list_ents= [], [], []
-#     dict_representation = process_representation_file(path_file_representation)
-#     list_labels = process_dataset(path_dataset_file)
-#     for (ent1, ent2), label in list_labels:
-#         representation_floats = dict_representation[(ent1, ent2)]
-#         list_ents.append([ent1, ent2])
-#         list_representation.append(representation_floats)
-#         labels.append(label)
-#     return list_ents, list_representation , labels
-
-
-# def run_save_model(path_file_representation, path_dataset_file, path_file_model, algorithms):
-
-#     pairs, X_train, y_train = read_representation_dataset_file(path_file_representation, path_dataset_file)
-
-#     for alg in algorithms:
-
-#         ensure_dir(path_file_model + alg + '/')
-        
-#         if alg == "XGB":
-#             ml_model = xgb.XGBClassifier()
-#             ml_model.fit(np.array(X_train), np.array(y_train))
-#         if alg == "RF":
-#             ml_model = RandomForestClassifier()
-#             ml_model.fit(X_train, y_train)
-
-#         if alg == "MLP":
-#             ml_model = MLPClassifier()
-#             ml_model.fit(X_train, y_train)
-
-#         pickle.dump(ml_model, open(path_file_model + alg + "/Model_" + alg + ".pickle", "wb"))
-
-
-# def run_save_graph(ontology_file_path, annotations_file_path, path_graph, path_label_classes, type='PPI'):
-
-#     g, dic_labels_classes = construct_kg(ontology_file_path, annotations_file_path, type)
-#     G = nx.DiGraph()
-#     _rdflib_to_networkx_graph(g, G, calc_weights=False, edge_attrs=lambda s, p, o: {})
-
-#     nx.write_gpickle(G, path_graph)
-#     with open(path_label_classes, 'wb') as path_file:
-#         pickle.dump(dic_labels_classes, path_file)
-
 
 
 def getExplanations(path_graph, path_label_classes, path_embedding_classes, entity_to_neighbours_path, target_entity,
@@ -576,7 +313,7 @@ def compute_performance_metrics(predicted_labels, list_labels):
     re = recall_score(list_labels, predicted_labels, average='weighted')
     return waf, pr, re
 
-## get the wrapper method necessary (backward) and sufficient (forward) explanations
+
 def get_new_score(ml_model, X_test, predicted_class_original, entity):
     X_test = [X_test.tolist()]
     predicted_class = ml_model.predict(X_test).tolist()[0]
@@ -716,7 +453,6 @@ def compute_one_round_of_candidate_neighbours(ml_model_extra, predicted_class_or
     return explanation_found, current_best_neighbours, current_best_explanation, candidate_neighbours_results
 
 
-## necessary (backward)
 def wrapper_method_for_explanation_selection(
         ml_model_extra, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
         n_embeddings, all_neighbours, max_len_explanations, explan_type, entity):
@@ -842,6 +578,7 @@ def compute_nec_suf_delta(met, test_labels, predictions, predictions_necessary, 
 
     return scores_dict
 
+
 def compute_performance_metrics_v2(test_labels, predictions, predictions_necessary, predictions_sufficient):
     effectiveness_results = compute_nec_suf_delta(accuracy_score, test_labels, predictions, predictions_necessary, predictions_sufficient)
 
@@ -871,6 +608,7 @@ def get_pred_withoutnecessary(ml_model, all_neighbours, necessary_explan, dic_em
     pred_withoutnecessary = ml_model.predict(x_withoutnecessary.reshape(1, -1))[0]
 
     return pred_withoutnecessary
+
 
 def get_pred_withsufficient(ml_model, all_neighbours, sufficient_explan, dic_emb_classes, n_embeddings):
     vectors_withsufficient = []
@@ -906,7 +644,9 @@ def make_explan_dict(pred_proba_predicted_class_original, type_explan, all_neigh
     return explan_dict
 
 
-def explain(input_data): ## can remove label is not doing nothing here
+def explain(input_data):
+    ## can remove label is not doing nothing here
+
     # entity, label, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model, threshold, max_len_explanations = \
     #     input_data
     entity, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model_extra, threshold, max_len_explanations = \
@@ -1170,6 +910,7 @@ def explain(input_data): ## can remove label is not doing nothing here
     # return label, pred_original, pred_withoutnecessary, pred_withsufficient, pred_withoutnecessary_len1, pred_withsufficient_len1
     return necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict, necessary_path_to_best_explanation, sufficient_path_to_best_explanation, explain_entity_time
 
+
 def pool_handler(pool_size, input_data):
     with Pool(pool_size) as p:
         res = list(
@@ -1197,12 +938,6 @@ def pool_handler_tqdm(pool_size, input_data, items, verbose):
     return res
 
 
-# def compute_effectiveness_kelpie(dataset_labels, path_graph, path_label_classes, path_embedding_classes,
-#                                  entity_to_neighbours_path, path_file_model, model_stats_path, path_explanations,
-#                                  max_len_explanations, n_embeddings=100):
-# def compute_effectiveness_kelpie(dataset_labels, path_embedding_classes,
-#                                  entity_to_neighbours_path, path_file_model, model_stats_path, path_explanations,
-#                                  max_len_explanations, n_embeddings=100):
 def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
                                  entity_to_neighbours, ml_model_extra, results_summary, path_explanations,
                                  max_len_explanations, explanation_limit, n_jobs, n_embeddings=100):
@@ -1543,6 +1278,7 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
            [necessary_paths_best_expl_dict, sufficient_paths_best_expl_dict], \
             explain_stats
 
+
 def compute_random(dataset_labels, ml_model_extra, dic_emb_classes, entity_to_neighbours, explanations_dicts):
 
     ml_model, lenc = ml_model_extra
@@ -1698,6 +1434,152 @@ def compute_random(dataset_labels, ml_model_extra, dic_emb_classes, entity_to_ne
                                                            pred_eva_necessary_len1, pred_eva_sufficient_len1)
 
     return [effectiveness_results_lenx, effectiveness_results_len1]
+
+
+def compute_effectiveness_global_explainer(dataset_labels, dic_emb_classes,
+                                 entity_to_neighbours, ml_model_extra, results_summary, path_explanations,
+                                 max_len_explanations, explanation_limit, n_jobs, n_embeddings=100):
+
+    ml_model, lenc = ml_model_extra
+    if type(ml_model.estimator).__name__ == 'XGBClassifier':
+        multiproc = False
+
+    if explanation_limit == 'threshold':
+        threshold = results_summary['std_preds']
+    elif explanation_limit == 'class_change':
+        threshold = -1
+    else:
+        raise Exception('explanation_limit option is missing')
+
+    n_embeddings = len(list(dic_emb_classes.values())[0])
+
+    entities = [entity for (entity, _) in dataset_labels]
+    labels = [label for (_, label) in dataset_labels]
+
+    pred_eva_necessary, pred_eva_necessary_len1 = [], []
+    pred_eva_sufficient, pred_eva_sufficient_len1 = [], []
+    original_pred_eva = []
+    explanations_dict_lenx = dict()
+    explanations_dict_len1 = dict()
+    necessary_paths_best_expl_dict = dict()
+    sufficient_paths_best_expl_dict = dict()
+    explain_stats = defaultdict(list)
+
+    # for (entity, label) in dataset_labels[33:34]:
+    # for (entity, label) in dataset_labels[0:1]:
+    # for (entity, label) in dataset_labels[2:3]:
+    for (entity, label) in dataset_labels:
+        # input_data = [entity, label, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model, threshold,
+        #               max_len_explanations]
+        input_data = [entity, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model_extra, threshold,
+                        max_len_explanations]
+
+        necessary_explan_dict, \
+        necessary_explan_len1_dict, \
+        sufficient_explan_dict, \
+        sufficient_explan_len1_dict, \
+        necessary_path_to_best_explanation, \
+        sufficient_path_to_best_explanation, \
+        explain_entity_time = explain(input_data)
+
+        dicts_to_add_label_info = [necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict]
+        for dict_to_add_lab_info in dicts_to_add_label_info:
+            for key, value in dict_to_add_lab_info.items():
+                new_value = value[:]
+                new_value.insert(2, label)
+                dict_to_add_lab_info[key] = new_value
+
+        pred_original = necessary_explan_dict['all_neighbours'][3]
+        pred_withoutnecessary = list(necessary_explan_dict.values())[1][4]
+        pred_withoutnecessary_len1 = list(necessary_explan_len1_dict.values())[1][4]
+        pred_withsufficient = list(sufficient_explan_dict.values())[1][4]
+        pred_withsufficient_len1 = list(sufficient_explan_len1_dict.values())[1][4]
+        original_pred_eva.append(pred_original)
+        pred_eva_necessary.append(pred_withoutnecessary)
+        pred_eva_necessary_len1.append(pred_withoutnecessary_len1)
+        pred_eva_sufficient.append(pred_withsufficient)
+        pred_eva_sufficient_len1.append(pred_withsufficient_len1)
+
+        explanations_dict_lenx[entity] = [necessary_explan_dict, sufficient_explan_dict]
+        explanations_dict_len1[entity] = [necessary_explan_len1_dict, sufficient_explan_len1_dict]
+
+        necessary_paths_best_expl_dict[entity] = necessary_path_to_best_explanation
+        sufficient_paths_best_expl_dict[entity] = sufficient_path_to_best_explanation
+
+        [all_neighbours, all_neighbour_relation] = entity_to_neighbours[entity]
+        all_neighbours_size = len(all_neighbours)
+
+        explain_stats['entities'].append(entity)
+        explain_stats['all_neighbours_size'].append(all_neighbours_size)
+        explain_stats['explain_times'].append(explain_entity_time)
+        explain_stats[f'necessary_len{max_len_explanations}_facts_size'].append(len(list(necessary_explan_dict.keys())[1]))
+        explain_stats['necessary_len1_facts_size'].append(len(list(necessary_explan_len1_dict.keys())[1]))
+        explain_stats[f'sufficient_len{max_len_explanations}_facts_size'].append(len(list(sufficient_explan_dict.keys())[1]))
+        explain_stats['sufficient_len1_facts_size'].append(len(list(sufficient_explan_len1_dict.keys())[1]))
+        explain_stats[f'necessary_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(necessary_explan_dict.values())[1][1])
+        explain_stats[f'necessary_len1_satisfied_{explanation_limit}'].append(list(necessary_explan_len1_dict.values())[1][1])
+        explain_stats[f'sufficient_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(sufficient_explan_dict.values())[1][1])
+        explain_stats[f'sufficient_len1_satisfied_{explanation_limit}'].append(list(sufficient_explan_len1_dict.values())[1][1])
+
+    # ignore_all_neighbours_explanations = True
+    ignore_all_neighbours_explanations = False
+    if ignore_all_neighbours_explanations:
+        facts_size_lenx_keys = [f'necessary_len{max_len_explanations}_facts_size',
+                                f'sufficient_len{max_len_explanations}_facts_size']
+        entity_to_remove_idx = []
+        print('\n')
+        for key in facts_size_lenx_keys:
+            indexes_found_in_key = []
+            for idx, (all_n_size, expl_size) in enumerate(zip(explain_stats['all_neighbours_size'], explain_stats[key])):
+                if all_n_size == expl_size:
+                    entity_to_remove_idx.append(idx)
+                    indexes_found_in_key.append(idx)
+            print(f'{key} ent indxs w/ all neighs in explanation: ', indexes_found_in_key)
+
+        entity_to_remove_idx = list(set(entity_to_remove_idx))
+        # print(len(labels))
+        labels_filtered = [lab for idx, lab in enumerate(labels) if idx not in entity_to_remove_idx]
+        original_pred_eva_filtered = [lab for idx, lab in enumerate(original_pred_eva) if idx not in entity_to_remove_idx]
+        pred_eva_necessary_filtered = [lab for idx, lab in enumerate(pred_eva_necessary) if idx not in entity_to_remove_idx]
+        pred_eva_sufficient_filtered = [lab for idx, lab in enumerate(pred_eva_sufficient) if idx not in entity_to_remove_idx]
+        # print(len(labels_filtered))
+
+        effectiveness_results_lenx = compute_performance_metrics_v2(labels_filtered, original_pred_eva_filtered,
+                                                            pred_eva_necessary_filtered, pred_eva_sufficient_filtered)
+        
+        facts_size_len1_keys = ['necessary_len1_facts_size',
+                                'sufficient_len1_facts_size']
+        entity_to_remove_idx = []
+        print('\n')
+        for key in facts_size_len1_keys:
+            indexes_found_in_key = []
+            for idx, (all_n_size, expl_size) in enumerate(zip(explain_stats['all_neighbours_size'], explain_stats[key])):
+                if all_n_size == expl_size:
+                    entity_to_remove_idx.append(idx)
+                    indexes_found_in_key.append(idx)
+            print(f'{key} ent indxs w/ all neighs in explanation: ', indexes_found_in_key)
+
+        entity_to_remove_idx = list(set(entity_to_remove_idx))
+        # print(len(labels))
+        labels_filtered = [lab for idx, lab in enumerate(labels) if idx not in entity_to_remove_idx]
+        original_pred_eva_filtered = [lab for idx, lab in enumerate(original_pred_eva) if idx not in entity_to_remove_idx]
+        pred_eva_necessary_len1_filtered = [lab for idx, lab in enumerate(pred_eva_necessary_len1) if idx not in entity_to_remove_idx]
+        pred_eva_sufficient_len1_filtered = [lab for idx, lab in enumerate(pred_eva_sufficient_len1) if idx not in entity_to_remove_idx]
+        # print(len(labels_filtered))
+
+        effectiveness_results_len1 = compute_performance_metrics_v2(labels_filtered, original_pred_eva_filtered,
+                                                            pred_eva_necessary_len1_filtered, pred_eva_sufficient_len1_filtered)
+    else:
+        effectiveness_results_lenx = compute_performance_metrics_v2(labels, original_pred_eva,
+                                                            pred_eva_necessary, pred_eva_sufficient)
+        
+        effectiveness_results_len1 = compute_performance_metrics_v2(labels, original_pred_eva,
+                                                            pred_eva_necessary_len1, pred_eva_sufficient_len1)
+
+    return [effectiveness_results_lenx, effectiveness_results_len1], \
+           [explanations_dict_lenx, explanations_dict_len1], \
+           [necessary_paths_best_expl_dict, sufficient_paths_best_expl_dict], \
+            explain_stats
 
 
 if __name__== '__main__':

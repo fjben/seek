@@ -226,7 +226,7 @@ def stats_for_preds(predictions_proba):
 cpu_num = cpu_count()
 
 data_path = f'node_classifier/data/{dataset}'
-model_path = f'node_classifier/cv_model_xgboost/{dataset}_{kge_model}'
+model_path = f'node_classifier/cv_model_mlp/{dataset}_{kge_model}'
 # model_path = f'node_classifier/cv_model_test/{dataset}_{kge_model}'
 model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions'
 if kge_model == 'RDF2Vec':
@@ -535,17 +535,17 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
     # model = RandomForestClassifier(random_state=RANDOM_STATE)
     # param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## RandomForestClassifier()
 
-    # model = MLPClassifier(random_state=RANDOM_STATE)
-    # param_grid = {
-    #               'hidden_layer_sizes': [(100,), (50,50), (50,100,50)], ## MLPClassifier()
-    #               'activation': ['tanh', 'relu'],
-    #               'solver': ['sgd', 'adam'],
-    #               # 'alpha': [0.0001, 0.05],
-    #               # 'learning_rate': ['constant','adaptive'],
-    #               }
+    model = MLPClassifier(random_state=RANDOM_STATE)
+    param_grid = {
+                  'hidden_layer_sizes': [(100,), (50,50), (50,100,50)], ## MLPClassifier()
+                  'activation': ['tanh', 'relu'],
+                  'solver': ['sgd', 'adam'],
+                  # 'alpha': [0.0001, 0.05],
+                  # 'learning_rate': ['constant','adaptive'],
+                  }
 
-    model = XGBClassifier(random_state=RANDOM_STATE)
-    param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## xgboost
+    # model = XGBClassifier(random_state=RANDOM_STATE)
+    # param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## xgboost
     
     scoring=['accuracy',
             'f1_weighted',

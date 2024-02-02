@@ -83,7 +83,7 @@ verbose = 1
 
 ############################################################################### logging
 
-sys.stdout = Logger()
+# sys.stdout = Logger()
 
 
 ############################################################################### functions
@@ -291,8 +291,8 @@ ensure_dir(model_path)
 
 if keep_seeds_for_running_multiple_cv_models:
     shutil.copy('node_classifier/tmp/reproducibility_parameters.txt', os.path.join(model_path, 'reproducibility_parameters.txt'))
-else:
-    shutil.move('node_classifier/tmp/reproducibility_parameters.txt', os.path.join(model_path, 'reproducibility_parameters.txt'))
+# else:
+#     shutil.move('node_classifier/tmp/reproducibility_parameters.txt', os.path.join(model_path, 'reproducibility_parameters.txt'))
 
 RANDOM_STATE, workers = setup_random_seeds(model_path, cpu_num)
 
@@ -910,4 +910,4 @@ save_global_results(aproximate_model, all_results_summary, all_effectiveness_res
 toc_total_script_time = time.perf_counter()
 print(f"\nTotal script time in ({toc_total_script_time - tic_total_script_time:0.4f}s)\n")
 
-shutil.move('node_classifier/tmp/train_models.log', os.path.join(model_path, 'train_models.log'))
+# shutil.move('node_classifier/tmp/train_models.log', os.path.join(model_path, 'train_models.log'))
