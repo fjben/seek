@@ -643,6 +643,34 @@ def make_explan_dict(pred_proba_predicted_class_original, type_explan, all_neigh
     # print('\nexplan_dict', explan_dict)
     return explan_dict
 
+def make_properties_explan_dict(pred_proba_predicted_class_original, type_explan, all_neighbours, all_neighbour_relation,
+                     pred_original):
+    ## this is different from the make_explan_dict because here it is already a dict that comes from the wrap, maybe
+    ## all this is unnecessary
+
+    explan_dict = OrderedDict()
+    # explan_dict['all_neighbours'] = [pred_proba_predicted_class_original, False, pred_original]
+    explan_dict['all_object_properties'] = [pred_proba_predicted_class_original, False, pred_original]
+    ## this could be simplified or used to add maybe the neighbours again to the dict maybe as a second list in the
+    ## values part of the dict
+    # print('type_explan')
+    # print(type_explan)
+    for explan in type_explan:
+        # print('explan')
+        # print(explan)
+        # print(explan[1])
+        # raise
+        # with_relation = []
+        # for neighbour in explan[0]:
+        #     # print('neighbour', neighbour)
+        #     relation = all_neighbour_relation[all_neighbours.index(neighbour)]
+        #     with_relation.append((neighbour, relation))
+        # # print('with_relation', with_relation)
+        # # print('explan', explan, '\n')
+        explan_dict[explan[0]] = explan[1]
+    # print('\nexplan_dict', explan_dict)
+    return explan_dict
+
 
 def explain(input_data):
     ## can remove label is not doing nothing here
@@ -1436,9 +1464,227 @@ def compute_random(dataset_labels, ml_model_extra, dic_emb_classes, entity_to_ne
     return [effectiveness_results_lenx, effectiveness_results_len1]
 
 
+def compute_one_round_of_candidate_properties(ml_model_extra, predicted_class_original,
+                                                pred_proba_predicted_class_original, threshold, dic_emb_classes,
+                                                n_embeddings, all_neighbours, all_neighbour_relation, current_neighbours_in_explanation,
+                                                all_relations, explan_type, entity):
+    
+    ml_model, lenc = ml_model_extra
+    
+    # early_stop = False
+
+    candidate_relations_results = dict()
+    # candidate_neighbours = list(candidate_neighbours)
+    for candidate_relation in all_relations:
+        ## always set to False before evaluating a new candidate
+        explanation_found = False
+
+        # some_neighbours = current_neighbours_in_explanation + [candidate_relation]
+        some_neighbours = [candidate_relation]
+        # print('\n', all_neighbours)
+        # print('\n', all_neighbour_relation)
+        candidate_relation_indexes = [idx for idx, relation in enumerate(all_neighbour_relation) if relation == candidate_relation]
+        some_neighbours = [neighbour for idx, neighbour in enumerate(all_neighbours) if idx in candidate_relation_indexes]
+        # print(some_neighbours)
+
+        avg_vectors = get_list_of_vectors_with_some_neighbours(dic_emb_classes, all_neighbours,
+                                                                some_neighbours, explan_type=explan_type)
+        
+        X_test = get_avg_vectors(avg_vectors, n_embeddings)
+
+        new_predicted_class, new_predicted_class_num, new_pred_proba_predicted_class_original = get_new_score(ml_model, X_test, predicted_class_original, entity)
+        if type(ml_model.estimator).__name__ == 'XGBClassifier':
+            new_predicted_class = lenc.inverse_transform([new_predicted_class])[0]
+
+        if threshold == -1:
+            if explan_type == 'necessary':
+                if predicted_class_original != new_predicted_class_num:
+                    explanation_found = True
+            elif explan_type == 'sufficient':
+                if predicted_class_original == new_predicted_class_num:
+                    explanation_found = True
+        else:
+            if explan_type == 'necessary':
+                if pred_proba_predicted_class_original - new_pred_proba_predicted_class_original >= threshold:
+                    explanation_found = True
+            elif explan_type == 'sufficient':
+                if pred_proba_predicted_class_original - new_pred_proba_predicted_class_original <= threshold:
+                    explanation_found = True
+
+        # candidate_relations_results[tuple(some_neighbours)] = [new_pred_proba_predicted_class_original, explanation_found, new_predicted_class]
+        candidate_relations_results[candidate_relation] = [new_pred_proba_predicted_class_original, explanation_found, new_predicted_class]
+
+
+        # if early_stop:
+        #     if explan_type == 'necessary' and explanation_found:
+        #         current_best_neighbours = list(min(candidate_relations_results.items(), key=lambda x: x[1][0])[0])
+        #         return explanation_found, current_best_neighbours, candidate_relations_results
+        #     elif explan_type == 'sufficient' and explanation_found:
+        #         current_best_neighbours = list(max(candidate_relations_results.items(), key=lambda x: x[1][0])[0])
+        #         return explanation_found, current_best_neighbours, candidate_relations_results
+
+    ## this is also not doing anything here
+    if explan_type == 'necessary':
+        current_best_explanation = min(candidate_relations_results.items(), key=lambda x: x[1][0])
+        current_best_neighbours = list(current_best_explanation[0])
+        ## explanation_found is set to True if the best explanation so far has a value of True
+        explanation_found = list(current_best_explanation)[1][1]
+    elif explan_type == 'sufficient':
+        current_best_explanation = max(candidate_relations_results.items(), key=lambda x: x[1][0])
+        current_best_neighbours = list(current_best_explanation[0])
+        ## explanation_found is set to True if the best explanation so far has a value of True
+        explanation_found = list(current_best_explanation)[1][1]
+    else:
+        raise Exception('must have a explan_type of explanation')
+
+    ## only the candidate_relations_results is doing something here
+    return explanation_found, current_best_neighbours, current_best_explanation, candidate_relations_results
+
+
+def wrap_global_explanation(
+        ml_model_extra, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
+        n_embeddings, all_neighbours, all_neighbour_relation, max_len_explanations, all_relations, explan_type, entity):
+    
+    # all_neigbours_set = set(all_neighbours)
+
+    wrapper_explan = dict()
+    wrapper_explan_len1 = dict()
+    
+    ## this is doing nothing here but necessary because still didn't remove this variables from further below
+    current_neighbours_in_explanation = set()
+    current_neighbours_in_explanation = list()
+
+    # candidate_neighbours = set(all_neighbours)
+    path_to_best_explanation = []
+    explan_len1 = True
+    ## for len 1 this could be a for loop but for now keep it like this
+    # while candidate_neighbours:
+    ## actually do not need a loop of any kind, will just test everything inside compute_one_round were the main
+    ## explanation data structure is created
+    # while all_relations:
+    #     candidate_relation = all_relations[0]
+
+    explanation_found, \
+    current_neighbours_in_explanation, \
+    current_best_explanation, \
+    current_explan = compute_one_round_of_candidate_properties(ml_model_extra, predicted_class_original,
+                                                pred_proba_predicted_class_original, threshold, dic_emb_classes,
+                                                n_embeddings, all_neighbours, all_neighbour_relation,
+                                                current_neighbours_in_explanation, all_relations,
+                                                explan_type=explan_type, entity=entity)
+    # print(current_explan)
+    # raise
+
+    # path_to_best_explanation.append(current_best_explanation)
+    wrapper_explan.update(current_explan)
+    if explan_len1:
+        wrapper_explan_len1.update(current_explan)
+        explan_len1 = False
+    # if explanation_found or len(list(current_explan.keys())[0]) == max_len_explanations:
+    #     break
+
+        # current_neighbours_in_explanation_set = set(current_neighbours_in_explanation)
+
+        # candidate_neighbours = all_neigbours_set.difference(current_neighbours_in_explanation_set)
+        # all_relations.pop(0)
+
+    ## 1. not necessary because we are not interested at this stage what is the best relation but still, but in this case
+    ## keep all the explanations and not just the True like in local explanations
+    ## 2. could just have reverse True or False and simplify code
+    if explan_type == 'necessary':
+        wrapper_explan = list(sorted(wrapper_explan.items(), key=lambda x: x[1][0])) ## from smallest to largest model performance
+        # top_explanation = wrapper_explan[0]
+        # wrapper_explan = [(key, val) for (key, val) in wrapper_explan if val[1] == True]
+        # if not wrapper_explan: ## to guarantee at least one explanation even if it's not an accepted explanation
+        #     wrapper_explan = [top_explanation]
+        wrapper_explan = [(key, val) for (key, val) in wrapper_explan]
+        wrapper_explan_len1 = list(sorted(wrapper_explan_len1.items(), key=lambda x: x[1][0]))
+        # top_explanation = wrapper_explan_len1[0]
+        # wrapper_explan_len1 = [(key, val) for (key, val) in wrapper_explan_len1 if val[1] == True]
+        # if not wrapper_explan_len1: ## to guarantee at least one explanation even if it's not an accepted explanation
+        #     wrapper_explan_len1 = [top_explanation]
+        wrapper_explan_len1 = [(key, val) for (key, val) in wrapper_explan_len1]
+    elif explan_type == 'sufficient':
+        wrapper_explan = list(sorted(wrapper_explan.items(), key=lambda x: x[1][0], reverse=True))
+        # top_explanation = wrapper_explan[0]
+        # wrapper_explan = [(key, val) for (key, val) in wrapper_explan if val[1] == True]
+        # if not wrapper_explan: ## to guarantee at least one explanation even if it's not an accepted explanation
+        #     wrapper_explan = [top_explanation]
+        wrapper_explan = [(key, val) for (key, val) in wrapper_explan]
+        wrapper_explan_len1 = list(sorted(wrapper_explan_len1.items(), key=lambda x: x[1][0], reverse=True))
+        # top_explanation = wrapper_explan_len1[0]
+        # wrapper_explan_len1 = [(key, val) for (key, val) in wrapper_explan_len1 if val[1] == True]
+        # if not wrapper_explan_len1: ## to guarantee at least one explanation even if it's not an accepted explanation
+        #     wrapper_explan_len1 = [top_explanation]
+        wrapper_explan_len1 = [(key, val) for (key, val) in wrapper_explan_len1]
+
+    return wrapper_explan, wrapper_explan_len1, path_to_best_explanation
+
+
+def global_explain(input_data):
+    entity, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model_extra, threshold, max_len_explanations, \
+         all_relations = input_data
+    
+    tic = time.perf_counter()
+
+    ml_model, lenc = ml_model_extra
+
+    [all_neighbours, all_neighbour_relation] = entity_to_neighbours[entity]
+
+    all_vectors = []
+    for neighbour in all_neighbours:
+        all_vectors.append(dic_emb_classes[neighbour])
+    if len(all_vectors) == 0:
+        all_avg_vectors = np.array([0 for i in range(n_embeddings)])
+    elif len(all_vectors) == 1:
+        all_avg_vectors = np.array(all_vectors[0])
+    else:
+        all_array_vectors = np.array(all_vectors)
+        all_avg_vectors = np.average(all_array_vectors, 0)
+
+    X_test_original = [all_avg_vectors.tolist()]
+    pred_original = ml_model.predict(X_test_original).tolist()[0]
+    if type(ml_model.estimator).__name__ == 'XGBClassifier':
+        pred_original = lenc.inverse_transform([pred_original])[0]
+    pred_proba_original = ml_model.predict_proba(X_test_original).tolist()[0]
+    predicted_class_original = np.argmax(pred_proba_original)
+    pred_proba_predicted_class_original = pred_proba_original[predicted_class_original]
+
+
+    necessary_explan, necessary_explan_len1, necessary_path_to_best_explanation = wrap_global_explanation(
+        ml_model_extra, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
+        n_embeddings, all_neighbours, all_neighbour_relation, max_len_explanations, all_relations, explan_type='necessary', entity=entity)
+    
+    sufficient_explan, sufficient_explan_len1, sufficient_path_to_best_explanation = wrap_global_explanation(
+        ml_model_extra, predicted_class_original, pred_proba_predicted_class_original, threshold, dic_emb_classes,
+        n_embeddings, all_neighbours, all_neighbour_relation, max_len_explanations, all_relations, explan_type='sufficient', entity=entity)
+
+    # print(necessary_explan)
+    convert_to_dict = [necessary_explan, necessary_explan_len1, sufficient_explan, sufficient_explan_len1]
+    converted_dicts = []
+    for item_to_convert in convert_to_dict:
+        converted_dicts.append(make_properties_explan_dict(pred_proba_predicted_class_original, item_to_convert, all_neighbours,
+                                                all_neighbour_relation, pred_original))
+    # print(converted_dicts[0])
+    # raise
+
+    for convert_dict in converted_dicts:
+        for key, value in convert_dict.items():
+            new_value = value[:]
+            new_value.insert(2, pred_original)
+            convert_dict[key] = new_value
+
+    necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict = converted_dicts
+
+    toc = time.perf_counter()
+    explain_entity_time = toc - tic
+
+    return necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict, necessary_path_to_best_explanation, sufficient_path_to_best_explanation, explain_entity_time
+
+
 def compute_effectiveness_global_explainer(dataset_labels, dic_emb_classes,
                                  entity_to_neighbours, ml_model_extra, results_summary, path_explanations,
-                                 max_len_explanations, explanation_limit, n_jobs, n_embeddings=100):
+                                 max_len_explanations, explanation_limit, all_relations, n_jobs, n_embeddings=100):
 
     ml_model, lenc = ml_model_extra
     if type(ml_model.estimator).__name__ == 'XGBClassifier':
@@ -1460,7 +1706,7 @@ def compute_effectiveness_global_explainer(dataset_labels, dic_emb_classes,
     pred_eva_sufficient, pred_eva_sufficient_len1 = [], []
     original_pred_eva = []
     explanations_dict_lenx = dict()
-    explanations_dict_len1 = dict()
+    explanations_dict_len1 = OrderedDict()
     necessary_paths_best_expl_dict = dict()
     sufficient_paths_best_expl_dict = dict()
     explain_stats = defaultdict(list)
@@ -1472,15 +1718,18 @@ def compute_effectiveness_global_explainer(dataset_labels, dic_emb_classes,
         # input_data = [entity, label, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model, threshold,
         #               max_len_explanations]
         input_data = [entity, entity_to_neighbours, dic_emb_classes, n_embeddings, ml_model_extra, threshold,
-                        max_len_explanations]
+                        max_len_explanations, all_relations]
 
+        ## the dicts for dict and len1_dict are the same because we are only doing len1, this could be simplified
         necessary_explan_dict, \
         necessary_explan_len1_dict, \
         sufficient_explan_dict, \
         sufficient_explan_len1_dict, \
         necessary_path_to_best_explanation, \
         sufficient_path_to_best_explanation, \
-        explain_entity_time = explain(input_data)
+        explain_entity_time = global_explain(input_data)
+        # print(necessary_explan_len1_dict)
+        # raise
 
         dicts_to_add_label_info = [necessary_explan_dict, necessary_explan_len1_dict, sufficient_explan_dict, sufficient_explan_len1_dict]
         for dict_to_add_lab_info in dicts_to_add_label_info:
@@ -1489,97 +1738,112 @@ def compute_effectiveness_global_explainer(dataset_labels, dic_emb_classes,
                 new_value.insert(2, label)
                 dict_to_add_lab_info[key] = new_value
 
-        pred_original = necessary_explan_dict['all_neighbours'][3]
-        pred_withoutnecessary = list(necessary_explan_dict.values())[1][4]
-        pred_withoutnecessary_len1 = list(necessary_explan_len1_dict.values())[1][4]
-        pred_withsufficient = list(sufficient_explan_dict.values())[1][4]
-        pred_withsufficient_len1 = list(sufficient_explan_len1_dict.values())[1][4]
-        original_pred_eva.append(pred_original)
-        pred_eva_necessary.append(pred_withoutnecessary)
-        pred_eva_necessary_len1.append(pred_withoutnecessary_len1)
-        pred_eva_sufficient.append(pred_withsufficient)
-        pred_eva_sufficient_len1.append(pred_withsufficient_len1)
+        # print('\n', entity)
+        # [all_neighbours, all_neighbour_relation] = entity_to_neighbours[entity]
+        # print(all_neighbour_relation)
+        # print(sufficient_explan_dict)
 
-        explanations_dict_lenx[entity] = [necessary_explan_dict, sufficient_explan_dict]
+        # # pred_original = necessary_explan_dict['all_neighbours'][3]
+        # pred_original = necessary_explan_dict['all_object_properties'][3]
+        # pred_withoutnecessary = list(necessary_explan_dict.values())[1][4]
+        # pred_withoutnecessary_len1 = list(necessary_explan_len1_dict.values())[1][4]
+        # pred_withsufficient = list(sufficient_explan_dict.values())[1][4]
+        # pred_withsufficient_len1 = list(sufficient_explan_len1_dict.values())[1][4]
+        # original_pred_eva.append(pred_original)
+        # pred_eva_necessary.append(pred_withoutnecessary)
+        # pred_eva_necessary_len1.append(pred_withoutnecessary_len1)
+        # pred_eva_sufficient.append(pred_withsufficient)
+        # pred_eva_sufficient_len1.append(pred_withsufficient_len1)
+
+
+        ## explanation dicts, only using len1
+        # explanations_dict_lenx[entity] = [necessary_explan_dict, sufficient_explan_dict]
         explanations_dict_len1[entity] = [necessary_explan_len1_dict, sufficient_explan_len1_dict]
 
-        necessary_paths_best_expl_dict[entity] = necessary_path_to_best_explanation
-        sufficient_paths_best_expl_dict[entity] = sufficient_path_to_best_explanation
 
+        ## explanation paths, with len 1 these are empty
+        # necessary_paths_best_expl_dict[entity] = necessary_path_to_best_explanation
+        # sufficient_paths_best_expl_dict[entity] = sufficient_path_to_best_explanation
+
+
+        ## explain stats, some stats not needed
         [all_neighbours, all_neighbour_relation] = entity_to_neighbours[entity]
-        all_neighbours_size = len(all_neighbours)
+        # all_neighbours_size = len(all_neighbours)
 
         explain_stats['entities'].append(entity)
-        explain_stats['all_neighbours_size'].append(all_neighbours_size)
+        # explain_stats['all_neighbours_size'].append(all_neighbours_size)
         explain_stats['explain_times'].append(explain_entity_time)
-        explain_stats[f'necessary_len{max_len_explanations}_facts_size'].append(len(list(necessary_explan_dict.keys())[1]))
-        explain_stats['necessary_len1_facts_size'].append(len(list(necessary_explan_len1_dict.keys())[1]))
-        explain_stats[f'sufficient_len{max_len_explanations}_facts_size'].append(len(list(sufficient_explan_dict.keys())[1]))
-        explain_stats['sufficient_len1_facts_size'].append(len(list(sufficient_explan_len1_dict.keys())[1]))
-        explain_stats[f'necessary_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(necessary_explan_dict.values())[1][1])
-        explain_stats[f'necessary_len1_satisfied_{explanation_limit}'].append(list(necessary_explan_len1_dict.values())[1][1])
-        explain_stats[f'sufficient_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(sufficient_explan_dict.values())[1][1])
-        explain_stats[f'sufficient_len1_satisfied_{explanation_limit}'].append(list(sufficient_explan_len1_dict.values())[1][1])
+        # explain_stats[f'necessary_len{max_len_explanations}_facts_size'].append(len(list(necessary_explan_dict.keys())[1]))
+        # explain_stats['necessary_len1_facts_size'].append(len(list(necessary_explan_len1_dict.keys())[1]))
+        # explain_stats[f'sufficient_len{max_len_explanations}_facts_size'].append(len(list(sufficient_explan_dict.keys())[1]))
+        # explain_stats['sufficient_len1_facts_size'].append(len(list(sufficient_explan_len1_dict.keys())[1]))
+        # explain_stats[f'necessary_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(necessary_explan_dict.values())[1][1])
+        # explain_stats[f'necessary_len1_satisfied_{explanation_limit}'].append(list(necessary_explan_len1_dict.values())[1][1])
+        # explain_stats[f'sufficient_len{max_len_explanations}_satisfied_{explanation_limit}'].append(list(sufficient_explan_dict.values())[1][1])
+        # explain_stats[f'sufficient_len1_satisfied_{explanation_limit}'].append(list(sufficient_explan_len1_dict.values())[1][1])
 
-    # ignore_all_neighbours_explanations = True
-    ignore_all_neighbours_explanations = False
-    if ignore_all_neighbours_explanations:
-        facts_size_lenx_keys = [f'necessary_len{max_len_explanations}_facts_size',
-                                f'sufficient_len{max_len_explanations}_facts_size']
-        entity_to_remove_idx = []
-        print('\n')
-        for key in facts_size_lenx_keys:
-            indexes_found_in_key = []
-            for idx, (all_n_size, expl_size) in enumerate(zip(explain_stats['all_neighbours_size'], explain_stats[key])):
-                if all_n_size == expl_size:
-                    entity_to_remove_idx.append(idx)
-                    indexes_found_in_key.append(idx)
-            print(f'{key} ent indxs w/ all neighs in explanation: ', indexes_found_in_key)
+    ## not computing effectiveness here
+    # ## compute effectiveness
+    # # ignore_all_neighbours_explanations = True
+    # ignore_all_neighbours_explanations = False
+    # if ignore_all_neighbours_explanations:
+    #     facts_size_lenx_keys = [f'necessary_len{max_len_explanations}_facts_size',
+    #                             f'sufficient_len{max_len_explanations}_facts_size']
+    #     entity_to_remove_idx = []
+    #     print('\n')
+    #     for key in facts_size_lenx_keys:
+    #         indexes_found_in_key = []
+    #         for idx, (all_n_size, expl_size) in enumerate(zip(explain_stats['all_neighbours_size'], explain_stats[key])):
+    #             if all_n_size == expl_size:
+    #                 entity_to_remove_idx.append(idx)
+    #                 indexes_found_in_key.append(idx)
+    #         print(f'{key} ent indxs w/ all neighs in explanation: ', indexes_found_in_key)
 
-        entity_to_remove_idx = list(set(entity_to_remove_idx))
-        # print(len(labels))
-        labels_filtered = [lab for idx, lab in enumerate(labels) if idx not in entity_to_remove_idx]
-        original_pred_eva_filtered = [lab for idx, lab in enumerate(original_pred_eva) if idx not in entity_to_remove_idx]
-        pred_eva_necessary_filtered = [lab for idx, lab in enumerate(pred_eva_necessary) if idx not in entity_to_remove_idx]
-        pred_eva_sufficient_filtered = [lab for idx, lab in enumerate(pred_eva_sufficient) if idx not in entity_to_remove_idx]
-        # print(len(labels_filtered))
+    #     entity_to_remove_idx = list(set(entity_to_remove_idx))
+    #     # print(len(labels))
+    #     labels_filtered = [lab for idx, lab in enumerate(labels) if idx not in entity_to_remove_idx]
+    #     original_pred_eva_filtered = [lab for idx, lab in enumerate(original_pred_eva) if idx not in entity_to_remove_idx]
+    #     pred_eva_necessary_filtered = [lab for idx, lab in enumerate(pred_eva_necessary) if idx not in entity_to_remove_idx]
+    #     pred_eva_sufficient_filtered = [lab for idx, lab in enumerate(pred_eva_sufficient) if idx not in entity_to_remove_idx]
+    #     # print(len(labels_filtered))
 
-        effectiveness_results_lenx = compute_performance_metrics_v2(labels_filtered, original_pred_eva_filtered,
-                                                            pred_eva_necessary_filtered, pred_eva_sufficient_filtered)
+    #     effectiveness_results_lenx = compute_performance_metrics_v2(labels_filtered, original_pred_eva_filtered,
+    #                                                         pred_eva_necessary_filtered, pred_eva_sufficient_filtered)
         
-        facts_size_len1_keys = ['necessary_len1_facts_size',
-                                'sufficient_len1_facts_size']
-        entity_to_remove_idx = []
-        print('\n')
-        for key in facts_size_len1_keys:
-            indexes_found_in_key = []
-            for idx, (all_n_size, expl_size) in enumerate(zip(explain_stats['all_neighbours_size'], explain_stats[key])):
-                if all_n_size == expl_size:
-                    entity_to_remove_idx.append(idx)
-                    indexes_found_in_key.append(idx)
-            print(f'{key} ent indxs w/ all neighs in explanation: ', indexes_found_in_key)
+    #     facts_size_len1_keys = ['necessary_len1_facts_size',
+    #                             'sufficient_len1_facts_size']
+    #     entity_to_remove_idx = []
+    #     print('\n')
+    #     for key in facts_size_len1_keys:
+    #         indexes_found_in_key = []
+    #         for idx, (all_n_size, expl_size) in enumerate(zip(explain_stats['all_neighbours_size'], explain_stats[key])):
+    #             if all_n_size == expl_size:
+    #                 entity_to_remove_idx.append(idx)
+    #                 indexes_found_in_key.append(idx)
+    #         print(f'{key} ent indxs w/ all neighs in explanation: ', indexes_found_in_key)
 
-        entity_to_remove_idx = list(set(entity_to_remove_idx))
-        # print(len(labels))
-        labels_filtered = [lab for idx, lab in enumerate(labels) if idx not in entity_to_remove_idx]
-        original_pred_eva_filtered = [lab for idx, lab in enumerate(original_pred_eva) if idx not in entity_to_remove_idx]
-        pred_eva_necessary_len1_filtered = [lab for idx, lab in enumerate(pred_eva_necessary_len1) if idx not in entity_to_remove_idx]
-        pred_eva_sufficient_len1_filtered = [lab for idx, lab in enumerate(pred_eva_sufficient_len1) if idx not in entity_to_remove_idx]
-        # print(len(labels_filtered))
+    #     entity_to_remove_idx = list(set(entity_to_remove_idx))
+    #     # print(len(labels))
+    #     labels_filtered = [lab for idx, lab in enumerate(labels) if idx not in entity_to_remove_idx]
+    #     original_pred_eva_filtered = [lab for idx, lab in enumerate(original_pred_eva) if idx not in entity_to_remove_idx]
+    #     pred_eva_necessary_len1_filtered = [lab for idx, lab in enumerate(pred_eva_necessary_len1) if idx not in entity_to_remove_idx]
+    #     pred_eva_sufficient_len1_filtered = [lab for idx, lab in enumerate(pred_eva_sufficient_len1) if idx not in entity_to_remove_idx]
+    #     # print(len(labels_filtered))
 
-        effectiveness_results_len1 = compute_performance_metrics_v2(labels_filtered, original_pred_eva_filtered,
-                                                            pred_eva_necessary_len1_filtered, pred_eva_sufficient_len1_filtered)
-    else:
-        effectiveness_results_lenx = compute_performance_metrics_v2(labels, original_pred_eva,
-                                                            pred_eva_necessary, pred_eva_sufficient)
+    #     effectiveness_results_len1 = compute_performance_metrics_v2(labels_filtered, original_pred_eva_filtered,
+    #                                                         pred_eva_necessary_len1_filtered, pred_eva_sufficient_len1_filtered)
+    # else:
+    #     effectiveness_results_lenx = compute_performance_metrics_v2(labels, original_pred_eva,
+    #                                                         pred_eva_necessary, pred_eva_sufficient)
         
-        effectiveness_results_len1 = compute_performance_metrics_v2(labels, original_pred_eva,
-                                                            pred_eva_necessary_len1, pred_eva_sufficient_len1)
+    #     effectiveness_results_len1 = compute_performance_metrics_v2(labels, original_pred_eva,
+    #                                                         pred_eva_necessary_len1, pred_eva_sufficient_len1)
 
-    return [effectiveness_results_lenx, effectiveness_results_len1], \
-           [explanations_dict_lenx, explanations_dict_len1], \
-           [necessary_paths_best_expl_dict, sufficient_paths_best_expl_dict], \
-            explain_stats
+    # return [effectiveness_results_lenx, effectiveness_results_len1], \
+    #        [explanations_dict_lenx, explanations_dict_len1], \
+    #        [necessary_paths_best_expl_dict, sufficient_paths_best_expl_dict], \
+    #         explain_stats
+    return explanations_dict_len1, explain_stats
 
 
 if __name__== '__main__':

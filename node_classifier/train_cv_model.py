@@ -10,6 +10,7 @@ import sys
 import time
 import warnings
 
+from collections import Counter
 from multiprocessing import cpu_count
 from collections import defaultdict
 from collections import OrderedDict
@@ -30,7 +31,8 @@ from xgboost import XGBClassifier
 
 sys.path.append(os.path.realpath(os.path.join(os.path.abspath(__file__), os.path.pardir, os.path.pardir)))
 from utils.logger import Logger
-from run_seek_explanations import compute_effectiveness_kelpie, compute_random
+from run_seek_explanations import compute_effectiveness_kelpie, compute_random, \
+    compute_effectiveness_global_explainer, compute_performance_metrics_v2
 
 
 tic_total_script_time = time.perf_counter()
@@ -291,8 +293,8 @@ ensure_dir(model_path)
 
 if keep_seeds_for_running_multiple_cv_models:
     shutil.copy('node_classifier/tmp/reproducibility_parameters.txt', os.path.join(model_path, 'reproducibility_parameters.txt'))
-# else:
-#     shutil.move('node_classifier/tmp/reproducibility_parameters.txt', os.path.join(model_path, 'reproducibility_parameters.txt'))
+else:
+    shutil.move('node_classifier/tmp/reproducibility_parameters.txt', os.path.join(model_path, 'reproducibility_parameters.txt'))
 
 RANDOM_STATE, workers = setup_random_seeds(model_path, cpu_num)
 
@@ -331,11 +333,34 @@ with open(entity_to_neighbours_path, 'r') as f:
 with open(path_embedding_classes, 'r') as f:
     dic_emb_classes = json.load(f)
 
+
 def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                          train_index_files_designation, test_index_files_designation,
                          aproximate_model, RANDOM_STATE, max_len_explanations, explanation_limit,
                          n_jobs, n_partitions,
                          overwrite_invidivual_explanations=False):
+    
+    ## preprocessing for the global explainer
+    all_relations = []
+    all_relations_count = []
+    all_relation_exists_in_entity_count = []
+    for entity in entities:
+        [all_neighbours, all_neighbour_relation] = entity_to_neighbours[entity]
+        [all_relations.append(relation) for relation in all_neighbour_relation if relation not in all_relations]
+    #     [all_relations_count.append(relation) for relation in all_neighbour_relation]
+
+    #     entity_relations = []
+    #     for relation in all_neighbour_relation:
+    #         if relation not in entity_relations:
+    #             entity_relations.append(relation)
+    #             all_relation_exists_in_entity_count.append(relation)            
+
+    # all_relations_count = Counter(all_relations_count)
+    # all_relation_exists_in_entity_count = Counter(all_relation_exists_in_entity_count)
+    # print(all_relations)
+    # print(all_relation_exists_in_entity_count)
+    # raise
+
     
     all_results_summary = []
     all_effectiveness_results_lenx = []
@@ -343,6 +368,8 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
     all_random_effectiveness_results_lenx = []
     all_random_effectiveness_results_len1 = []
     all_explain_stats = defaultdict(list)
+    all_explanations_dict_len1_for_global = OrderedDict()
+    all_explain_stats_for_global = defaultdict(list)
     for index_partition in range(0, n_partitions):
         train_index = process_indexes_partition(train_index_files_designation + str(index_partition) + '.txt')
         test_index = process_indexes_partition(test_index_files_designation + str(index_partition) + '.txt')
@@ -372,10 +399,12 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
         # print(len(train_embeddings))
         # print(len(test_embeddings))
 
-        clf_extra, results_summary, effectiveness_results, random_effectiveness_results, explain_stats = train_classifier(train_embeddings, train_labels, test_embeddings,
+        clf_extra, results_summary, effectiveness_results, random_effectiveness_results, explain_stats, \
+        explanations_dict_len1_for_global, explain_stats_for_global = train_classifier(train_embeddings, train_labels, test_embeddings,
                                                                        test_labels, test_entities, aproximate_model,
                                                                        entity_to_neighbours, dic_emb_classes,
                                                                        max_len_explanations, explanation_limit,
+                                                                       all_relations,
                                                                        current_model_path, n_jobs, RANDOM_STATE, 
                                                                        overwrite_invidivual_explanations=overwrite_invidivual_explanations)
 
@@ -391,6 +420,19 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
             for key, _ in explain_stats.items():
                 all_explain_stats[key].extend(explain_stats[key])
 
+        # print(len(explanations_dict_len1_for_global))
+        # print(explain_stats_for_global)
+        # raise
+        # all_explanations_dict_len1_for_global.update(explanations_dict_len1_for_global)
+        for key in explanations_dict_len1_for_global.keys():
+            all_explanations_dict_len1_for_global[(key, f'fold{index_partition}')] = explanations_dict_len1_for_global[key]
+        for key in explain_stats_for_global.keys():
+            all_explain_stats_for_global[key].extend(explain_stats_for_global[key])
+
+    # print(len(all_explanations_dict_len1_for_global))
+    # [print(len(all_explain_stats_for_global[key])) for key in all_explain_stats_for_global.keys()]
+    # raise
+
     if not any(all_effectiveness_results_lenx) and not any(all_effectiveness_results_len1):
         all_effectiveness_results_lenx = False
         all_effectiveness_results_len1 = False
@@ -398,10 +440,155 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
         all_random_effectiveness_results_lenx = False
         all_random_effectiveness_results_len1 = False
 
+
+
+
+    ## global explanations compute effectiveness
+    print('DONT FORGET THIS:', explanation_limit)
+    print('SAVE ORIGINAL DICTS FROM GLOBAL EXPLANATIONS')
+    nec_global_explanations, suf_global_explanations = defaultdict(list), defaultdict(list)
+    all_neighbours_results = defaultdict(list)
+    # print(all_explanations_dict_len1_for_global)
+    # raise
+    for key, [nec_global_dict, suf_global_dict] in all_explanations_dict_len1_for_global.items():
+        all_neighbours_results[('all_object_properties', 'necessary')].append(nec_global_dict['all_object_properties'])
+        all_neighbours_results[('all_object_properties', 'sufficient')].append(suf_global_dict['all_object_properties'])
+        # print(key, len(nec_global_dic), len(nec_global_dic))
+        # print(nec_global_dic)
+        # raise
+        for relation in all_relations:
+            # print('\nrelation', relation)
+            # print(nec_global_dic[relation])
+            nec_global_explanations[relation].append(nec_global_dict[relation])
+            suf_global_explanations[relation].append(suf_global_dict[relation])
+        # print(nec_global_explanations)
+        # raise
+    # print(all_neighbours_results)
+    # raise
+    nec_property_score, suf_property_score = {}, {}
+    for relation in all_relations:
+        # print(key)
+        count_satisfied_condition = 0
+        for result in nec_global_explanations[relation]:
+            if result[1] == True:
+                count_satisfied_condition += 1
+        nec_property_score[relation] = count_satisfied_condition / len(nec_global_explanations[relation])
+
+        count_satisfied_condition = 0
+        for result in suf_global_explanations[relation]:
+            if result[1] == True:
+                count_satisfied_condition += 1
+        suf_property_score[relation] = count_satisfied_condition / len(suf_global_explanations[relation])
+
+    # print(nec_property_score)
+    best_nec_object_property = max(nec_property_score, key=nec_property_score.get)
+    best_suf_object_property = max(suf_property_score, key=suf_property_score.get)
+    # print(nec_property_score)
+    # print(suf_property_score)
+
+    # print(summary_results)
+    # raise
+    # print(nec_global_explanations[best_nec_object_property])
+
+    labels_from_results = [result[2] for result in nec_global_explanations[best_nec_object_property]]
+    original_pred_eva = [result[3] for result in nec_global_explanations[best_nec_object_property]]
+    pred_eva_necessary_len1 = [result[4] for result in nec_global_explanations[best_nec_object_property]]
+    pred_eva_sufficient_len1 = [result[2] for result in suf_global_explanations[best_suf_object_property]]
+        
+    effectiveness_results_len1_global_explanations = compute_performance_metrics_v2(labels_from_results, original_pred_eva,
+                                                        pred_eva_necessary_len1, pred_eva_sufficient_len1)
+    # print(effectiveness_results_len1)
+    # print(all_relations_count)
+    # print(all_relation_exists_in_entity_count)
+
+    # print(all_explanations_dict_len1_for_global.keys())
+    # summary_global_explanations
+    # print(effectiveness_results_len1_global_explanations)
+    # raise
+
+    ## global explanations make global dict
+    summary_results = defaultdict(list)
+    for expl_t, expl_t_global_expl, prop_score in zip(['necessary', 'sufficient'],
+                                          [nec_global_explanations, suf_global_explanations],
+                                          [nec_property_score, suf_property_score]):
+        predict_proba_all_neighb = [result[0] for result in all_neighbours_results[('all_object_properties', expl_t)]]
+        # print(predict_proba_all_neighb)
+        # raise
+        mean, std = np.mean(predict_proba_all_neighb), np.std(predict_proba_all_neighb)
+        summary_results[f'{expl_t}_len1'].append({'all_object_properties': [f'{mean} ({std})', 0]})
+        temp_relations = {}
+        for relation in all_relations:
+            predict_proba_relation_expl_t = [result[0] for result in expl_t_global_expl[relation]]
+            mean, std = np.mean(predict_proba_relation_expl_t), np.std(predict_proba_relation_expl_t)
+            # summary_results[f'{expl_t}_len1'].append({relation: [f'{mean} ({std})', prop_score[relation]]})
+            temp_relations[relation] = [f'{mean} ({std})', prop_score[relation]]
+        # print(temp_relations)
+        temp_relations = dict(sorted(temp_relations.items(), key=lambda x: float(x[1][0].split(' ')[0]), reverse=True))
+        # print(temp_relations)
+        # raise
+        summary_results[f'{expl_t}_len1'].append(temp_relations)
+        # print(summary_results)
+        # raise
+
+    with open(os.path.join(model_path, f'explain_stats_for_global_explainer_{explanation_limit}.json'), 'w', encoding ='utf8') as f: 
+        json.dump(explain_stats_for_global, f, ensure_ascii = False)
+
+    nec_to_save, suf_to_save = OrderedDict(), OrderedDict()
+    for key, [nec_dict, suf_dict] in all_explanations_dict_len1_for_global.items():
+        new_key = f'{key[0]}_{key[1]}' ## because to save json doesn't support tuple in keys
+        nec_to_save[new_key] = nec_dict
+        suf_to_save[new_key] = suf_dict
+    # print(nec_to_save)
+    # print(suf_to_save)
+    # raise
+    with open(os.path.join(model_path, f'raw_global_explanations_global_dict_necessary.json'), 'w',
+                encoding ='utf8') as f: 
+        json.dump(nec_to_save, f, ensure_ascii = False)
+    with open(os.path.join(model_path, f'raw_global_explanations_global_dict_sufficient.json'), 'w',
+                encoding ='utf8') as f: 
+        json.dump(suf_to_save, f, ensure_ascii = False)
+
+
+    path_explanations = os.path.join(model_path, 'explanations')
+    path_global_explanations = os.path.join(model_path, 'global_explanations')
+    if overwrite_invidivual_explanations:
+        ensure_dir(path_global_explanations, option='overwrite')
+    else:
+        ensure_dir(path_explanations, option='make_if_not_exists')
+        ensure_dir(path_global_explanations, option='make_if_not_exists')
+
+    print(summary_results)
+    # raise
+
+    for key, ds in summary_results.items():
+        with open(os.path.join(path_global_explanations, f'{key}_{explanation_limit}.csv'), 'w') as f:
+            header = ['predict_proba', f'satisfied_{explanation_limit}_ratio', 'all_properties/property', '\n']
+            f.write('\t'.join(header))
+            for d in ds:
+                print(type(d))
+                print(d)
+                for key, value in d.items():
+                    value_list_of_strs = [str(val) for val in value]
+                    key_list_of_strs = []
+                    single_line_part0 = '\t'.join(value_list_of_strs)
+                    # print(single_line_part0)
+                    if isinstance(key, str):
+                        single_line_part1 = key
+                        # print('\n', single_line_part1)
+                    else:
+                        single_line_part1 = flatten_tupple(key)
+                        single_line_part1 = '\t'.join(single_line_part1)
+                        # print(single_line_part1)
+                    f.write('\t'.join([single_line_part0, single_line_part1, '\n']))
+
+
+
+
     return all_results_summary, \
            [all_effectiveness_results_lenx, all_effectiveness_results_len1], \
            [all_random_effectiveness_results_lenx, all_random_effectiveness_results_len1], \
-           all_explain_stats
+           all_explain_stats, \
+           effectiveness_results_len1_global_explanations
 
 def get_embeddings(aproximate_model, all_embeddings, all_entities, entity_to_neighbours, entities):
     if aproximate_model:
@@ -529,7 +716,7 @@ def save_effectiveness_results(path_explanations, max_len_explanations, effectiv
 
 
 def train_classifier(train_embeddings, train_labels, test_embeddings, test_labels, test_entities, aproximate_model,
-                     entity_to_neighbours, dic_emb_classes, max_len_explanations, explanation_limit,
+                     entity_to_neighbours, dic_emb_classes, max_len_explanations, explanation_limit, all_relations,
                      current_model_path, n_jobs, RANDOM_STATE, overwrite_invidivual_explanations=False):
     
     model = RandomForestClassifier(random_state=RANDOM_STATE)
@@ -633,20 +820,22 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
             ensure_dir(path_explanations, option='make_if_not_exists')
             ensure_dir(path_individual_explanations, option='make_if_not_exists')
 
-        # compute_effectiveness_kelpie(dataset_labels, path_embedding_classes, entity_to_neighbours_path,
-        #                              path_file_model, model_stats_path, path_explanations, max_len_explanations)
-        effectiveness_results, \
-        explanations_dicts, \
-        paths_to_explanations, \
-        explain_stats = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf_extra,
-                                                     results_summary, path_explanations, max_len_explanations,
-                                                     explanation_limit, n_jobs)
-        save_effectiveness_results(path_explanations, max_len_explanations, effectiveness_results,
-                                   paths_to_explanations, explanations_dicts, path_individual_explanations)
-        
-        random_effectiveness_results = compute_random(dataset_labels, clf_extra, dic_emb_classes, entity_to_neighbours, explanations_dicts)
-        # print(random_effectiveness_results)
-        # raise
+        # # compute_effectiveness_kelpie(dataset_labels, path_embedding_classes, entity_to_neighbours_path,
+        # #                              path_file_model, model_stats_path, path_explanations, max_len_explanations)
+        # effectiveness_results, \
+        # explanations_dicts, \
+        # paths_to_explanations, \
+        # explain_stats = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf_extra,
+        #                                              results_summary, path_explanations, max_len_explanations,
+        #                                              explanation_limit, n_jobs)
+        # save_effectiveness_results(path_explanations, max_len_explanations, effectiveness_results,
+        #                            paths_to_explanations, explanations_dicts, path_individual_explanations)
+        # random_effectiveness_results = compute_random(dataset_labels, clf_extra, dic_emb_classes, entity_to_neighbours, explanations_dicts)
+        # # print(random_effectiveness_results)
+        # # raise
+        effectiveness_results = [False, False]
+        random_effectiveness_results = [False, False]
+        explain_stats = False
 
         # fact_qtt_keys = [f'necessary_len{max_len_explanations}', 'necessary_len1_facts_qtt',
         #                  f'sufficient_len{max_len_explanations}', 'sufficient_len1_facts_qtt']
@@ -659,13 +848,25 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         #                                              explanation_limit, n_jobs, facts_qtt_info_for_random)
         # save_effectiveness_results(path_explanations, max_len_explanations, effectiveness_results,
         #                            paths_to_explanations, explanations_dicts, path_individual_explanations)
+            
+        ## global explanations
+        explanations_dict_len1_for_global, \
+        explain_stats_for_global = compute_effectiveness_global_explainer(dataset_labels, dic_emb_classes, entity_to_neighbours, clf_extra,
+                                                     results_summary, path_explanations, max_len_explanations,
+                                                     explanation_limit, all_relations, n_jobs)
+        # print('\n\n', explanations_dict_len1_for_global)
+        # print('\n\n', explain_stats_for_global)
+        # raise
 
     else:
         effectiveness_results = [False, False]
         random_effectiveness_results = [False, False]
         explain_stats = False
+        explanations_dict_len1_for_global = False
+        explain_stats_for_global = False
 
-    return clf_extra, results_summary, effectiveness_results, random_effectiveness_results, explain_stats
+    return clf_extra, results_summary, effectiveness_results, random_effectiveness_results, explain_stats, \
+        explanations_dict_len1_for_global, explain_stats_for_global
 
 
 def save_model_results(dataset, clf_extra, current_model_models_path, current_model_models_results_path, current_model_trained_path,
@@ -720,7 +921,7 @@ def global_results_dict(all_results):
 
 def save_global_results(aproximate_model, all_results_summary, all_effectiveness_results,
                         all_random_effectiveness_results, all_explain_stats,
-                        max_len_explanations, explanation_limit):
+                        max_len_explanations, explanation_limit, effectiveness_results_len1_global_explanations):
     global_results = global_results_dict(all_results_summary)
     # df = pd.DataFrame(all_results_summary)
     # columns = list(df.columns)
@@ -754,14 +955,20 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
     print('\n')
 
     if all_effectiveness_results[0]:
-        print(f'\n##########     Global Explainer Results for Maximum Length of Explanation of {max_len_explanations}     ##########')
+        print(f'\n##########     Global Local Explainer Results for Maximum Length of Explanation of {max_len_explanations}     ##########')
         for key, value in global_effectiveness_results_lenx.items():
             print(f'{key}: {value}')
         print('\n')
 
     if all_effectiveness_results[1]:
-        print(f'\n##########     Global Explainer Results for Maximum Length of Explanation of 1     ##########')
+        print(f'\n##########     Global Local Explainer Results for Maximum Length of Explanation of 1     ##########')
         for key, value in global_effectiveness_results_len1.items():
+            print(f'{key}: {value}')
+        print('\n')
+
+    if effectiveness_results_len1_global_explanations:
+        print(f'\n##########     Global Global Explainer Results for Maximum Length of Explanation of 1     ##########')
+        for key, value in effectiveness_results_len1_global_explanations.items():
             print(f'{key}: {value}')
         print('\n')
 
@@ -874,40 +1081,55 @@ def save_global_results(aproximate_model, all_results_summary, all_effectiveness
         df = pd.DataFrame([global_random_effectiveness_results_len1])
         df.to_csv(os.path.join(model_path, f'global_random_effectiveness_results_len1_{explanation_limit}_{model_type}.csv'), sep='\t')
 
+    if effectiveness_results_len1_global_explanations:
+        with open(os.path.join(model_path, f'global_explainer_global_effectiveness_results_len1_{explanation_limit}_{model_type}.json'), 'w', encoding ='utf8') as f: 
+            json.dump(effectiveness_results_len1_global_explanations, f, ensure_ascii = False)
+        df = pd.DataFrame([effectiveness_results_len1_global_explanations])
+        df.to_csv(os.path.join(model_path, f'global_explainer_global_effectiveness_results_len1_{explanation_limit}_{model_type}.csv'), sep='\t')
+
     return global_results
 
 
-explanation_limit='threshold'
+# explanation_limit='threshold'
 
-aproximate_model = False
-all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
-                     train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
-                     max_len_explanations, explanation_limit, n_jobs,
-                     n_partitions=n_splits)
+# aproximate_model = False
+# all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats, \
+#     effectiveness_results_len1_global_explanations = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+#                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
+#                      max_len_explanations, explanation_limit, n_jobs,
+#                      n_partitions=n_splits)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
+# save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_random_effectiveness_results,
+#                     all_explain_stats, max_len_explanations, explanation_limit,
+#                     effectiveness_results_len1_global_explanations)
 
 explanation_limit='threshold'
 
 aproximate_model = True
-all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats, \
+     effectiveness_results_len1_global_explanations = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
                      max_len_explanations, explanation_limit, n_jobs,
                      n_partitions=n_splits, overwrite_invidivual_explanations=True)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_random_effectiveness_results,
+                    all_explain_stats, max_len_explanations, explanation_limit,
+                    effectiveness_results_len1_global_explanations)
 
 explanation_limit='class_change'
 
 aproximate_model = True
-all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
+all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats, \
+     effectiveness_results_len1_global_explanations = run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic_emb_classes, entities, labels,
                      train_index_files_designation, test_index_files_designation, aproximate_model, RANDOM_STATE,
                      max_len_explanations, explanation_limit, n_jobs,
                      n_partitions=n_splits, overwrite_invidivual_explanations=False)
 
-save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_random_effectiveness_results, all_explain_stats, max_len_explanations, explanation_limit)
+save_global_results(aproximate_model, all_results_summary, all_effectiveness_results, all_random_effectiveness_results,
+                    all_explain_stats, max_len_explanations, explanation_limit,
+                    effectiveness_results_len1_global_explanations)
 
 toc_total_script_time = time.perf_counter()
 print(f"\nTotal script time in ({toc_total_script_time - tic_total_script_time:0.4f}s)\n")
 
-# shutil.move('node_classifier/tmp/train_models.log', os.path.join(model_path, 'train_models.log'))
+shutil.move('node_classifier/tmp/train_models.log', os.path.join(model_path, 'train_models.log'))
