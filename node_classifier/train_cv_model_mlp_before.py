@@ -227,7 +227,6 @@ cpu_num = cpu_count()
 
 data_path = f'node_classifier/data/{dataset}'
 model_path = f'node_classifier/cv_model_mlp/{dataset}_{kge_model}'
-# model_path = f'node_classifier/cv_model_test/{dataset}_{kge_model}'
 model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions'
 if kge_model == 'RDF2Vec':
     transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'

@@ -252,7 +252,6 @@ cpu_num = cpu_count()
 
 data_path = f'node_classifier/data/{dataset}'
 model_path = f'node_classifier/cv_model/{dataset}_{kge_model}'
-# model_path = f'node_classifier/cv_model_test/{dataset}_{kge_model}'
 # model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions'
 model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions_original_train_test'
 if kge_model == 'RDF2Vec':

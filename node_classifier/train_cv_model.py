@@ -15,7 +15,7 @@ from multiprocessing import cpu_count
 from collections import defaultdict
 from collections import OrderedDict
 
-from joblib import dump
+from joblib import dump, load
 import numpy as np
 import pandas as pd
 
@@ -57,6 +57,13 @@ dataset = args.dataset
 kge_model = args.kge_model
 keep_seeds_for_running_multiple_cv_models = args.keep_seeds_for_running_multiple_cv_models
 
+
+## for global explanations, adjust these two paths, and the mlp model params (not really needed)
+# load_model_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_rf_local_final'
+load_model_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_mlp_local_final'
+
+model_path = f'node_classifier/cv_model_mlp_global_final/{dataset}_{kge_model}'
+
 # print(keep_seeds_for_running_multiple_cv_models)
 # raise
 
@@ -85,7 +92,7 @@ verbose = 1
 
 ############################################################################### logging
 
-# sys.stdout = Logger()
+sys.stdout = Logger()
 
 
 ############################################################################### functions
@@ -228,8 +235,7 @@ def stats_for_preds(predictions_proba):
 cpu_num = cpu_count()
 
 data_path = f'node_classifier/data/{dataset}'
-model_path = f'node_classifier/cv_model/{dataset}_{kge_model}'
-# model_path = f'node_classifier/cv_model_test/{dataset}_{kge_model}'
+# model_path = f'node_classifier/cv_model/{dataset}_{kge_model}'
 model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions'
 if kge_model == 'RDF2Vec':
     transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
@@ -719,95 +725,116 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
                      entity_to_neighbours, dic_emb_classes, max_len_explanations, explanation_limit, all_relations,
                      current_model_path, n_jobs, RANDOM_STATE, overwrite_invidivual_explanations=False):
     
-    model = RandomForestClassifier(random_state=RANDOM_STATE)
-    param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## RandomForestClassifier()
+    current_model_partial_path = '/'.join(current_model_path.split('/')[-2:])
+    existing_model_models_path = os.path.join(load_model_path, current_model_partial_path, 'models')
+    existing_model_models_results_path = os.path.join(load_model_path, current_model_partial_path, 'models_results')
+    # print(existing_model_path)
+    # print(os.listdir(existing_model_path))
+    # raise
+    files_in_model_models_path = os.listdir(existing_model_models_path)
+    if files_in_model_models_path:
+        clf = load(os.path.join(existing_model_models_path, f'classifier_{dataset}'))
+        try:
+            with open(os.path.join(existing_model_models_path, f'lenc_{dataset}.pickle'), 'rb') as label_classes:
+                lenc = pickle.load(label_classes)
+        except:
+            lenc = None
+        clf_extra = [clf, lenc]
 
-    # model = MLPClassifier(random_state=RANDOM_STATE)
-    # param_grid = {
-    #               'hidden_layer_sizes': [(100,), (50,50), (50,100,50)], ## MLPClassifier()
-    #               'activation': ['tanh', 'relu'],
-    #               'solver': ['sgd', 'adam'],
-    #               # 'alpha': [0.0001, 0.05],
-    #               # 'learning_rate': ['constant','adaptive'],
-    #               }
-
-    # model = XGBClassifier(random_state=RANDOM_STATE)
-    # param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## xgboost
-    
-    scoring=['accuracy',
-            'f1_weighted',
-            'f1_macro',
-            'precision_weighted',
-            'recall_weighted',
-            'precision_macro',
-            'recall_macro'
-            ]
-    clf = GridSearchCV(
-        model,
-        param_grid,
-        scoring=scoring,
-        refit='f1_weighted'
-    )
-
-    if type(clf.estimator).__name__ == 'XGBClassifier':
-        lenc = LabelEncoder()
-        lenc.fit(train_labels)
-        train_labels = lenc.transform(train_labels)
-        test_labels = lenc.transform(test_labels)
+        with open(os.path.join(existing_model_models_results_path, 'results_summary.json'), 'r') as f:
+            results_summary = json.load(f)
+        
     else:
-        lenc = None
+        print('No existing model, fitting new model.')
+        # model = RandomForestClassifier(random_state=RANDOM_STATE)
+        # param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## RandomForestClassifier()
 
-    tic = time.perf_counter()
-    clf.fit(train_embeddings, train_labels)
-    toc = time.perf_counter()
-    classifier_fit_time = toc - tic
-    print(f"Fitted classifier model in ({classifier_fit_time:0.4f}s)\n")
+        model = MLPClassifier(random_state=RANDOM_STATE)
+        param_grid = {
+                      'hidden_layer_sizes': [(100,), (50,50), (50,100,50)], ## MLPClassifier()
+                      'activation': ['tanh', 'relu'],
+                      'solver': ['sgd', 'adam'],
+                      # 'alpha': [0.0001, 0.05],
+                      # 'learning_rate': ['constant','adaptive'],
+                      }
 
-    # Evaluate the Support Vector Machine on test embeddings.
-    predictions = clf.predict(test_embeddings)
-    predictions_proba = clf.predict_proba(test_embeddings)
+        # model = XGBClassifier(random_state=RANDOM_STATE)
+        # param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## xgboost
+        
+        scoring=['accuracy',
+                'f1_weighted',
+                'f1_macro',
+                'precision_weighted',
+                'recall_weighted',
+                'precision_macro',
+                'recall_macro'
+                ]
+        clf = GridSearchCV(
+            model,
+            param_grid,
+            scoring=scoring,
+            refit='f1_weighted'
+        )
 
-    acc_scr = accuracy_score(test_labels, predictions)
-    f1_scr_wei = f1_score(test_labels, predictions, average='weighted')
-    prec_scr_wei = precision_score(test_labels, predictions, average='weighted')
-    reca_scr_wei = recall_score(test_labels, predictions, average='weighted')
-    f1_scr_macro = f1_score(test_labels, predictions, average='macro')
-    prec_scr_macro = precision_score(test_labels, predictions, average='macro')
-    reca_scr_macro = recall_score(test_labels, predictions, average='macro')
+        if type(clf.estimator).__name__ == 'XGBClassifier':
+            lenc = LabelEncoder()
+            lenc.fit(train_labels)
+            train_labels = lenc.transform(train_labels)
+            test_labels = lenc.transform(test_labels)
+        else:
+            lenc = None
 
-    print(
-        f"Predicted {len(test_entities)} entities with\n"
-        + f"\t{acc_scr * 100 :.4f}% ACCURACY\n"
-        + f"\t{f1_scr_wei * 100 :.4f}% F1-WEIGHTED\n"
-        + f"\t{prec_scr_wei * 100 :.4f}% PRECISION-WEIGHTED\n"
-        + f"\t{reca_scr_wei * 100 :.4f}% RECALL-WEIGHTED\n"
-        + f"\t{f1_scr_macro * 100 :.4f}% F1-MACRO\n"
-        + f"\t{prec_scr_macro * 100 :.4f}% PRECISION-MACRO\n"
-        + f"\t{reca_scr_macro * 100 :.4f}% RECALL-MACRO"
-    )
-    print("Confusion Matrix ([[TN, FP], [FN, TP]]):")
-    print(confusion_matrix(test_labels, predictions))
+        tic = time.perf_counter()
+        clf.fit(train_embeddings, train_labels)
+        toc = time.perf_counter()
+        classifier_fit_time = toc - tic
+        print(f"Fitted classifier model in ({classifier_fit_time:0.4f}s)\n")
 
-    mean_preds, std_preds = stats_for_preds(predictions_proba)
-    print("Mean in probability of predicted class:\t\t\t", mean_preds)
-    print("Standard deviation in probability of predicted class:\t", std_preds, '\n')
+        # Evaluate the Support Vector Machine on test embeddings.
+        predictions = clf.predict(test_embeddings)
+        predictions_proba = clf.predict_proba(test_embeddings)
 
-    results_summary = {
-        'classifier_fit_time': classifier_fit_time,
-        'acc_scr': acc_scr,
-        'f1_scr_wei': f1_scr_wei,
-        'prec_scr_wei': prec_scr_wei,
-        'reca_scr_wei': reca_scr_wei,
-        'f1_scr_macro': f1_scr_macro,
-        'prec_scr_macro': prec_scr_macro,
-        'reca_scr_macro': reca_scr_macro,
-        'mean_preds': mean_preds,
-        'std_preds': std_preds
-    }
+        acc_scr = accuracy_score(test_labels, predictions)
+        f1_scr_wei = f1_score(test_labels, predictions, average='weighted')
+        prec_scr_wei = precision_score(test_labels, predictions, average='weighted')
+        reca_scr_wei = recall_score(test_labels, predictions, average='weighted')
+        f1_scr_macro = f1_score(test_labels, predictions, average='macro')
+        prec_scr_macro = precision_score(test_labels, predictions, average='macro')
+        reca_scr_macro = recall_score(test_labels, predictions, average='macro')
 
-    if type(clf.estimator).__name__ == 'XGBClassifier':
-        test_labels = lenc.inverse_transform(test_labels)
-    clf_extra = [clf, lenc]
+        print(
+            f"Predicted {len(test_entities)} entities with\n"
+            + f"\t{acc_scr * 100 :.4f}% ACCURACY\n"
+            + f"\t{f1_scr_wei * 100 :.4f}% F1-WEIGHTED\n"
+            + f"\t{prec_scr_wei * 100 :.4f}% PRECISION-WEIGHTED\n"
+            + f"\t{reca_scr_wei * 100 :.4f}% RECALL-WEIGHTED\n"
+            + f"\t{f1_scr_macro * 100 :.4f}% F1-MACRO\n"
+            + f"\t{prec_scr_macro * 100 :.4f}% PRECISION-MACRO\n"
+            + f"\t{reca_scr_macro * 100 :.4f}% RECALL-MACRO"
+        )
+        print("Confusion Matrix ([[TN, FP], [FN, TP]]):")
+        print(confusion_matrix(test_labels, predictions))
+
+        mean_preds, std_preds = stats_for_preds(predictions_proba)
+        print("Mean in probability of predicted class:\t\t\t", mean_preds)
+        print("Standard deviation in probability of predicted class:\t", std_preds, '\n')
+
+        results_summary = {
+            'classifier_fit_time': classifier_fit_time,
+            'acc_scr': acc_scr,
+            'f1_scr_wei': f1_scr_wei,
+            'prec_scr_wei': prec_scr_wei,
+            'reca_scr_wei': reca_scr_wei,
+            'f1_scr_macro': f1_scr_macro,
+            'prec_scr_macro': prec_scr_macro,
+            'reca_scr_macro': reca_scr_macro,
+            'mean_preds': mean_preds,
+            'std_preds': std_preds
+        }
+
+        if type(clf.estimator).__name__ == 'XGBClassifier':
+            test_labels = lenc.inverse_transform(test_labels)
+        clf_extra = [clf, lenc]
 
     if aproximate_model:
         dataset_labels = list(zip(test_entities, test_labels))
