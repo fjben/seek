@@ -150,7 +150,7 @@ def transformer_fit_transform_with_times(kg, entities):
 parser = argparse.ArgumentParser(description="description")
 parser.add_argument("--dataset",
                     type=str,
-                    choices=['AIFB', 'MUTAG', 'AM_FROM_DGL', 'MDGENRE', 'BGS_FROM_DGL'],
+                    choices=['AIFB', 'MUTAG', 'AM_FROM_DGL', 'MDGENRE', 'BGS_FROM_DGL', 'CITIES'],
                     help="The dataset to use: FB15k, FB15k-237, WN18, WN18RR or YAGO3-10")
 parser.add_argument("--aproximate_model",
                     action="store_true",
@@ -296,9 +296,13 @@ if best_embeddings_params:
 
 # Defines the KG with the predicates to be skipped.
 tic = time.perf_counter()
+# kg = KG(
+#     location = location,
+#     skip_predicates=skip_predicates,
+# )
 kg = KG(
-    location = location,
-    skip_predicates=skip_predicates,
+    "https://dbpedia.org/sparql",
+    skip_predicates=skip_predicates
 )
 toc = time.perf_counter()
 kg_init_time = toc - tic
@@ -315,11 +319,56 @@ transformer = RDF2VecTransformer(
     verbose=verbose,
 )
 
-tic = time.perf_counter()
-graph = rdflib.Graph().parse(location)
-toc = time.perf_counter()
-print(f"Graph parse time ({toc - tic:0.4f}s)")
-all_entities = get_all_entities(graph)
+
+
+
+# print(entities)
+# raise
+
+# tic = time.perf_counter()
+# graph = rdflib.Graph().parse(location)
+# toc = time.perf_counter()
+# print(f"Graph parse time ({toc - tic:0.4f}s)")
+# all_entities = get_all_entities(graph)
+def find_neighbours_dbpedia(entities):        
+    all_neighbours = []
+    entity_to_neighbours = OrderedDict()
+    for entity in entities[:1]:
+        # kg._get_hops(Vertex(str(entity)))
+        ## this only lists outgoing entities, not ingoing, but I think it's okay because when generating walks only
+        ## outgoing entities are used
+        entity_neighbours, entity_neighbour_relation = get_predicate_object_pairs_from_bdpedia(entity)
+        all_neighbours.extend(entity_neighbours)
+        entity_to_neighbours[entity] = [entity_neighbours, entity_neighbour_relation]
+
+    all_neighbours = list(set(all_neighbours))
+
+    return all_neighbours, entity_to_neighbours
+
+def get_predicate_object_pairs_from_bdpedia(entity):
+    neighbours, neighbours_relations = [], []
+    graph = rdflib.Graph()
+    qres = graph.query(
+        """
+        SELECT ?p ?n
+        WHERE {
+            SERVICE <https://dbpedia.org/sparql> {
+                <entity> ?p ?n.
+            }
+        }
+        """.replace('entity', entity)
+    )
+    for row in qres:
+        neighbours.append(str(row[1]))
+        neighbours_relations.append(str(row[0]))
+    
+    return neighbours, neighbours_relations
+
+all_neighbours, entity_to_neighbours = find_neighbours_dbpedia(entities)
+
+print(len(list(entity_to_neighbours.values())[0][1]))
+raise
+
 
 if embeddings_for_all_entities:
     all_embeddings, walks_time, embeddings_fit_time = transformer_fit_transform_with_times(kg, all_entities)

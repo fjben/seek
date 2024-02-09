@@ -28,12 +28,34 @@ kge_model = 'RDF2Vec'
 # explanation_type = ('sufficient', 'len5', 'threshold')
 # instance_to_explore = ['id2133instance', {'location': 'AIFB_model_2_RAN'}]
 
-explanation_type = ('sufficient', 'len5', 'class_change')
-instance_to_explore = ['proxy-28901', {'location': 'AM_FROM_DGL_model_0_RAN'}]
+# explanation_type = ('sufficient', 'len5', 'class_change')
+# instance_to_explore = ['proxy-28901', {'location': 'AM_FROM_DGL_model_0_RAN'}]
+
+# explanation_type = ('necessary', 'len1', 'class_change')
+# instance_to_explore = ['id2153instance', {'location': 'AIFB_model_7_RAN'}]
+
+# explanation_type = (('necessary', 'len5', 'class_change'))
+# instance_to_explore = ['id2105instance', {'location': 'AIFB_model_9_RAN'}]
+
+# explanation_type = (('necessary', 'len5', 'class_change'))
+# instance_to_explore = ['id2094instance', {'location': 'AIFB_model_4_RAN'}]
+
+# explanation_type = (('necessary', 'len1', 'class_change'))
+# instance_to_explore = ['proxy-66137', {'location': 'AM_FROM_DGL_model_9_RAN'}]
+
+explanation_type = (('necessary', 'len5', 'class_change'))
+instance_to_explore = ['proxy-51566', {'location': 'AM_FROM_DGL_model_1_RAN'}]
+
+# explanation_type = (('sufficient', 'len1', 'class_change'))
+# instance_to_explore = ['proxy-67863', {'location': 'AM_FROM_DGL_model_9_RAN'}]
+
+# explanation_type = (('sufficient', 'len5', 'class_change'))
+# instance_to_explore = ['proxy-28901', {'location': 'AM_FROM_DGL_model_0_RAN'}]
 
 
 data_path = f'node_classifier/data/{dataset}'
-results_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}_{kge_model}'
+# results_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}_{kge_model}'
+results_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model_rf_local_final/{dataset}_{kge_model}'
 sub_path = f"{instance_to_explore[1]['location']}/explanations/individual_explanations"
 sub_sub_path = instance_to_explore[0]
 file_name = '_'.join(explanation_type) + '.csv'
@@ -79,6 +101,19 @@ skip_predicates = set(ds_metadata['skip_predicates'])
 
 target_predicate = ds_metadata['target_predicate']
 
+# print(entities)
+# raise
+# ent_to_remove = 'http://purl.org/collections/nl/am/' + 'proxy-28901'
+ent_to_remove = 'http://purl.org/collections/nl/am/' + 'proxy-51566'
+print('\nremoved entity labels: ', ent_to_remove)
+# print(ent_to_remove in entities)
+# raise
+idx_to_remove = entities.index(ent_to_remove)
+# print(idx_to_remove)
+# raise
+entities.pop(idx_to_remove)
+labels.pop(idx_to_remove)
+
 
 ##### load rdf graph and convert to networkx
 grph = rdflib.Graph().parse(location)
@@ -123,7 +158,10 @@ for tail in rdf_tail_list:
     # print('\ntail', tail)
     for label in rdf_label_list:
         # print('\nlabel', label)
+        # print(list(nx.all_shortest_paths(Grph, source=rdflib.term.URIRef(tail), target=label)))
+        # raise
         # print([p for p in nx.all_shortest_paths(Grph, source=rdflib.term.URIRef(tail), target=label)])
+        # raise
         shortest_paths_list = [p for p in nx.all_shortest_paths(Grph, source=tail, target=label)]
         for path in shortest_paths_list:
             all_shortest_paths_list.append([str('/'.join(item.split('/')[-2:])) for item in path])
@@ -146,7 +184,10 @@ for path in all_shortest_paths_list:
     all_shortest_paths_dict[len(path)].append(path)
 all_shortest_paths_dict = OrderedDict(sorted(all_shortest_paths_dict.items()))
 # print('\nall_shortest_paths_dict:')
+i = 0
 for key, value in all_shortest_paths_dict.items():
+    if i == 1:
+        break
     print('\n\n\n\n')
     print(f'label is {key} hops away')
     current_val = None
@@ -159,6 +200,7 @@ for key, value in all_shortest_paths_dict.items():
             print('\n\n\t\tNEIGHBOUR:', current_val)
             print('\n', val)
     print('\n\n')
+    i += 1
 
 # limit_paths = 5
 

@@ -74,19 +74,47 @@ kge_models=(
 # done
 
 
-## for running global
-for DATASET in 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE' ## 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE'
+# ## for running rf global
+# for DATASET in 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE' ## 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE'
+# # for DATASET in "${datasets}"
+# do
+#     for KGE_MODEL in 'RDF2Vec' 'ComplEx' 'distMult' 'TransE' 'TransH' ## 'RDF2Vec' 'ComplEx' 'distMult' 'TransE' 'TransH'
+#     # for KGE_MODEL in "${kge_models}"
+#     do
+#         python3 node_classifier/train_cv_model_rf_global.py --dataset $DATASET --kge_model $KGE_MODEL --keep_seeds_for_running_multiple_cv_models
+#     done
+# done
+# ## for running mlp global
+# for DATASET in 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE' ## 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE'
+# # for DATASET in "${datasets}"
+# do
+#     for KGE_MODEL in 'RDF2Vec' 'ComplEx' 'distMult' 'TransE' 'TransH' ## 'RDF2Vec' 'ComplEx' 'distMult' 'TransE' 'TransH'
+#     # for KGE_MODEL in "${kge_models}"
+#     do
+#         python3 node_classifier/train_cv_model_mlp_global.py --dataset $DATASET --kge_model $KGE_MODEL --keep_seeds_for_running_multiple_cv_models
+#     done
+# done
+# ## for running xgb global
+# for DATASET in 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE' ## 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE'
+# # for DATASET in "${datasets}"
+# do
+#     for KGE_MODEL in 'RDF2Vec' 'ComplEx' 'distMult' 'TransE' 'TransH' ## 'RDF2Vec' 'ComplEx' 'distMult' 'TransE' 'TransH'
+#     # for KGE_MODEL in "${kge_models}"
+#     do
+#         python3 node_classifier/train_cv_model_xgb_global.py --dataset $DATASET --kge_model $KGE_MODEL --keep_seeds_for_running_multiple_cv_models
+#     done
+# done
+
+## for running rf local with time stats
+for DATASET in 'MDGENRE' ## 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE'
 # for DATASET in "${datasets}"
 do
-    for KGE_MODEL in 'RDF2Vec' 'ComplEx' 'distMult' 'TransE' 'TransH' ## 'RDF2Vec' 'ComplEx' 'distMult' 'TransE' 'TransH'
+    for KGE_MODEL in 'TransE' 'TransH' ## 'RDF2Vec' 'ComplEx' 'distMult' 'TransE' 'TransH'
     # for KGE_MODEL in "${kge_models}"
     do
-        python3 node_classifier/train_cv_model.py --dataset $DATASET --kge_model $KGE_MODEL --keep_seeds_for_running_multiple_cv_models
+        python3 node_classifier/train_cv_model_with_stats.py --dataset $DATASET --kge_model $KGE_MODEL --keep_seeds_for_running_multiple_cv_models
     done
 done
-
-
-
 
 
 ## BEFORE

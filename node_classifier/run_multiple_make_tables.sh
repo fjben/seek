@@ -2,18 +2,18 @@
 
 set -e
 
-datasets=(
-    'AIFB'
-    'MUTAG'
-    'AM_FROM_DGL'
-    'MDGENRE'
-)
-kge_models=(
-    'ComplEx'
-    'distMult'
-    'TransE'
-    'TransH'
-)
+# datasets=(
+#     'AIFB'
+#     'MUTAG'
+#     'AM_FROM_DGL'
+#     'MDGENRE'
+# )
+# kge_models=(
+#     'ComplEx'
+#     'distMult'
+#     'TransE'
+#     'TransH'
+# )
 
 for DATASET in 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE' ## 'AIFB' 'MUTAG' 'AM_FROM_DGL' 'MDGENRE'
 # for DATASET in "${datasets}"

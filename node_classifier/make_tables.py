@@ -34,7 +34,9 @@ kge_model = args.kge_model
 # dataset = 'MDGENRE'
 
 # main_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model'
-main_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_backup_latest'
+# main_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_backup_latest'
+# main_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_xgb_local_final'
+main_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_mlp_local_final'
 
 
 ############################################################################### functions

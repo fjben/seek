@@ -59,12 +59,11 @@ keep_seeds_for_running_multiple_cv_models = args.keep_seeds_for_running_multiple
 
 
 ## for global explanations, adjust these two paths, and the mlp model params (not really needed)
-load_model_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_rf_local_final'
-# load_model_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_mlp_local_final'
+# load_model_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_rf_local_final'
+load_model_path = '/home/fpaulino/SEEK/seek/node_classifier/cv_model_xgb_local_final'
 
-# model_path = f'node_classifier/cv_model_mlp_global_final/{dataset}_{kge_model}'
-model_path = f'node_classifier/cv_model_rf_global_final/{dataset}_{kge_model}'
-# model_path = f'node_classifier/cv_model_rf_local_with_time_stats_continue/{dataset}_{kge_model}'
+# model_path = f'node_classifier/cv_model_rf_global_final/{dataset}_{kge_model}'
+model_path = f'node_classifier/cv_model_xgb_global_final/{dataset}_{kge_model}'
 
 
 # print(keep_seeds_for_running_multiple_cv_models)
@@ -755,8 +754,8 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         
     else:
         print('No existing model, fitting new model.')
-        model = RandomForestClassifier(random_state=RANDOM_STATE)
-        param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## RandomForestClassifier()
+        # model = RandomForestClassifier(random_state=RANDOM_STATE)
+        # param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## RandomForestClassifier()
 
         # model = MLPClassifier(random_state=RANDOM_STATE)
         # param_grid = {
@@ -767,8 +766,8 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         #               # 'learning_rate': ['constant','adaptive'],
         #               }
 
-        # model = XGBClassifier(random_state=RANDOM_STATE)
-        # param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## xgboost
+        model = XGBClassifier(random_state=RANDOM_STATE)
+        param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## xgboost
         
         scoring=['accuracy',
                 'f1_weighted',

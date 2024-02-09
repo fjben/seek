@@ -10,7 +10,8 @@ dataset = 'AIFB'
 kge_model = 'RDF2Vec'
 
 # results_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model/{dataset}_{kge_model}'
-results_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model_backup_latest/{dataset}_{kge_model}'
+# results_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model_backup_latest/{dataset}_{kge_model}'
+results_path = f'/home/fpaulino/SEEK/seek/node_classifier/cv_model_rf_local_final/{dataset}_{kge_model}'
 
 individual_explanations_paths = []
 for i in range(10):
@@ -30,8 +31,12 @@ combinations = list(product(*[explanation_type, explanation_len, acceptance_cond
 # print(len(individual_explanations_paths))
 # raise
 
+one_property_per_entity = True
+# one_property_per_entity = False
+
 all_explanations_properties = defaultdict(list)
 # combinations = [('necessary', 'len5', 'threshold')]
+# combinations = [('sufficient', 'len1', 'class_change')]
 # for p in combinations[:1]:
 # for p in combinations[-1:]:
 for p in combinations:
@@ -42,6 +47,7 @@ for p in combinations:
         load_path = os.path.join(individual_expl_path, file_name)
         # print(load_path)
         explanation_rows = []
+        exists_in_explanation_rows = []
         with open(load_path, 'r') as f:
             reader = csv.reader(f, delimiter='\t')
             header = next(reader)
@@ -55,8 +61,14 @@ for p in combinations:
                 explanation_rows.append(row)
 
                 row = [row[i] for i in range(1, len(row), 2)]
+                # print(row)
+                # raise
                 # print('\n', row)
-                all_explanations_properties[p].extend(row)
+                [exists_in_explanation_rows.append(prop) for prop in row if prop not in exists_in_explanation_rows]
+                if not one_property_per_entity:
+                    all_explanations_properties[p].extend(row)
+            if one_property_per_entity:
+                all_explanations_properties[p].extend(exists_in_explanation_rows)
             # print('\n', explanation_rows)
 # print(list(all_explanations_properties.values())[0])
 # all_explanations_properties = [all_explanations_properties[key] = Counter(all_explanations_properties[key]) for key in all_explanations_properties.keys()]
@@ -75,7 +87,7 @@ print(all_explanations_properties_stats)
 
 df = pd.DataFrame(all_explanations_properties_stats)
 print(df)
-df.to_csv(os.path.join('node_classifier/more_results', f'property_stats_local_explanations_{dataset}_{kge_model}.csv'), sep='\t')
+df.to_csv(os.path.join('node_classifier/more_results', f'property_stats_local_explanations_{dataset}_{kge_model}_one_per_entity.csv'), sep='\t')
 
 
 

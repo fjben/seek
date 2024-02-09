@@ -24,21 +24,11 @@ rdf_file_path = args.rdf_file_path
 rdf_target_format = args.rdf_target_format
 
 
-from rdflib import Graph, URIRef
+from rdflib import Graph
 
 g = Graph()
-g.parse(rdf_file_path, format='nt')
-
-bob = URIRef("http://data.bgs.ac.uk/id/EarthMaterialClass/RockName/+^*SSD")
-# if (None, None, bob) in g:
-#     print("This graph knows that Bob is a person!")
-
-bobgraph = Graph()
-bobgraph += g.triples((None, None, bob))
-for s, p, o in bobgraph.triples((None, None, None)):
-    print(f"{s} {p} {o}")
-    
+g.parse(rdf_file_path)
 
 parent_filename = rdf_file_path.split('.')[0]
-filename = parent_filename + 'test' + rdf_target_format
+filename = parent_filename + rdf_target_format
 g.serialize(destination=filename)

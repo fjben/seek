@@ -970,7 +970,7 @@ def compute_effectiveness_kelpie(dataset_labels, dic_emb_classes,
                                  entity_to_neighbours, ml_model_extra, results_summary, path_explanations,
                                  max_len_explanations, explanation_limit, n_jobs, n_embeddings=100):
 
-    multiproc = True ## not working with XGBClassifier
+    multiproc = True ## not working with XGBClassifier, it seems like it's already parallelized
     # multiproc = False
 
     ml_model, lenc = ml_model_extra
