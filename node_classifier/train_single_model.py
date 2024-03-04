@@ -250,20 +250,27 @@ def stats_for_preds(predictions_proba):
         
 cpu_num = cpu_count()
 
+## sorts the models first to last using the name ending digits
+kge_model_path = f'node_classifier/2_model_multi_random/{dataset}'
+saved_models = os.listdir(kge_model_path)
+saved_models.sort(key=lambda x: int(x.split('_')[-2]))
+last_saved_model_num = int(saved_models[-1].split('_')[-2])
+
 data_path = f'node_classifier/data/{dataset}'
-model_path = f'node_classifier/cv_model/{dataset}_{kge_model}'
+# model_path = f'node_classifier/1_multi_random_single_model/{dataset}_{kge_model}'
+model_path = f'node_classifier/1_multi_random_single_model/{dataset}_{kge_model}/{dataset}_{kge_model}_{last_saved_model_num}'
 # model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions'
 model_data_partitions_path = f'node_classifier/cv_model_data_partitions/{dataset}/data_partitions_original_train_test'
 if kge_model == 'RDF2Vec':
-    transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/models/RDF2Vec_{dataset}'
-entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/entity_to_neighbours.json'
+    transformer_model_path = f'node_classifier/2_model_multi_random/{dataset}/{dataset}_model_{last_saved_model_num}_RAN/models/RDF2Vec_{dataset}'
+entity_to_neighbours_path = f'node_classifier/2_model_multi_random/{dataset}/{dataset}_model_{last_saved_model_num}_RAN/trained/entity_to_neighbours.json'
 if kge_model == 'RDF2Vec':
-    path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_0_RAN/trained/neighbours_embeddings.json'
+    path_embedding_classes = f'node_classifier/2_model_multi_random/{dataset}/{dataset}_model_{last_saved_model_num}_RAN/trained/neighbours_embeddings.json'
 elif kge_model in ['ComplEx', 'distMult', 'TransE', 'TransH']:
-    path_embedding_classes = f'Embeddings/node_classification/{kge_model}/{dataset}_{kge_model}_100.json'
-# transformer_model_path = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/models/RDF2Vec_{dataset}'
-# entity_to_neighbours_path = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/trained/entity_to_neighbours.json'
-# path_embedding_classes = f'node_classifier/model/{dataset}/{dataset}_model_-1_RAN/trained/neighbours_embeddings.json'
+    path_embedding_classes = f'Embeddings/2_multi_random_node_classification/{kge_model}/{dataset}_{kge_model}_100.json'
+# transformer_model_path = f'node_classifier/2_model_multi_random/{dataset}/{dataset}_model_-1_RAN/models/RDF2Vec_{dataset}'
+# entity_to_neighbours_path = f'node_classifier/2_model_multi_random/{dataset}/{dataset}_model_-1_RAN/trained/entity_to_neighbours.json'
+# path_embedding_classes = f'node_classifier/2_model_multi_random/{dataset}/{dataset}_model_-1_RAN/trained/neighbours_embeddings.json'
 
 with open(os.path.join(data_path, 'metadata.json'), 'r') as f:
     ds_metadata = json.load(f)
@@ -364,7 +371,14 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
                          aproximate_model, RANDOM_STATE, max_len_explanations, explanation_limit,
                          n_jobs, n_partitions,
                          overwrite_invidivual_explanations=False):
-    
+
+    ## preprocessing for the global explainer
+    all_relations = []
+    all_relations_count = []
+    all_relation_exists_in_entity_count = []
+    for entity in entities:
+        [all_neighbours, all_neighbour_relation] = entity_to_neighbours[entity]
+        [all_relations.append(relation) for relation in all_neighbour_relation if relation not in all_relations]
     all_results_summary = []
     all_effectiveness_results_lenx = []
     all_effectiveness_results_len1 = []
@@ -400,14 +414,14 @@ def run_cross_validation(all_embeddings, all_entities, entity_to_neighbours, dic
         # print(len(train_embeddings))
         # print(len(test_embeddings))
 
-        clf, results_summary, effectiveness_results, random_effectiveness_results, explain_stats = train_classifier(train_embeddings, train_labels, test_embeddings,
+        clf_extra, results_summary, effectiveness_results, random_effectiveness_results, explain_stats = train_classifier(train_embeddings, train_labels, test_embeddings,
                                                                        test_labels, test_entities, aproximate_model,
                                                                        entity_to_neighbours, dic_emb_classes,
                                                                        max_len_explanations, explanation_limit,
                                                                        current_model_path, n_jobs, RANDOM_STATE, 
                                                                        overwrite_invidivual_explanations=overwrite_invidivual_explanations)
 
-        save_model_results(dataset, clf, current_model_models_path, current_model_models_results_path, current_model_trained_path,
+        save_model_results(dataset, clf_extra, current_model_models_path, current_model_models_results_path, current_model_trained_path,
              results_summary)
         
         all_results_summary.append(results_summary)
@@ -560,9 +574,48 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
                      entity_to_neighbours, dic_emb_classes, max_len_explanations, explanation_limit,
                      current_model_path, n_jobs, RANDOM_STATE, overwrite_invidivual_explanations=False):
     
-    # Fit a Support Vector Machine on train embeddings and pick the best
-    # C-parameters (regularization strength).
-    param_grid = {"max_depth": [2, 4, 6, 8, 10]}
+    try:
+        current_model_partial_path = '/'.join(current_model_path.split('/')[-2:])
+        existing_model_models_path = os.path.join(load_model_path, current_model_partial_path, 'models')
+        existing_model_models_results_path = os.path.join(load_model_path, current_model_partial_path, 'models_results')
+        # print(existing_model_path)
+        # print(os.listdir(existing_model_path))
+        # raise
+        files_in_model_models_path = os.listdir(existing_model_models_path)
+    except:
+        files_in_model_models_path = None
+        print('No model path given to use to load model.')
+    if files_in_model_models_path:
+        clf = load(os.path.join(existing_model_models_path, f'classifier_{dataset}'))
+        try:
+            with open(os.path.join(existing_model_models_path, f'lenc_{dataset}.pickle'), 'rb') as label_classes:
+                lenc = pickle.load(label_classes)
+        except:
+            lenc = None
+        clf_extra = [clf, lenc]
+
+        with open(os.path.join(existing_model_models_results_path, 'results_summary.json'), 'r') as f:
+            results_summary = json.load(f)
+        ## convert str to float
+        results_summary = {key: float(value) for key, value in results_summary.items()}
+        
+    else:
+        print('No existing model, fitting new model.')
+        model = RandomForestClassifier(random_state=RANDOM_STATE)
+        param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## RandomForestClassifier()
+
+        # model = MLPClassifier(random_state=RANDOM_STATE)
+        # param_grid = {
+        #               'hidden_layer_sizes': [(100,), (50,50), (50,100,50)], ## MLPClassifier()
+        #               'activation': ['tanh', 'relu'],
+        #               'solver': ['sgd', 'adam'],
+        #               # 'alpha': [0.0001, 0.05],
+        #               # 'learning_rate': ['constant','adaptive'],
+        #               }
+
+        # model = XGBClassifier(random_state=RANDOM_STATE)
+        # param_grid = {"max_depth": [2, 4, 6, 8, 10]} ## xgboost
+        
     scoring=['accuracy',
             'f1_weighted',
             'f1_macro',
@@ -579,6 +632,13 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         refit='f1_weighted'
     )
 
+    if type(clf.estimator).__name__ == 'XGBClassifier':
+        lenc = LabelEncoder()
+        lenc.fit(train_labels)
+        train_labels = lenc.transform(train_labels)
+        test_labels = lenc.transform(test_labels)
+    else:
+        lenc = None
     tic = time.perf_counter()
     clf.fit(train_embeddings, train_labels)
     toc = time.perf_counter()
@@ -627,6 +687,11 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         'std_preds': std_preds
     }
 
+
+    if type(clf.estimator).__name__ == 'XGBClassifier':
+        test_labels = lenc.inverse_transform(test_labels)
+    clf_extra = [clf, lenc]
+
     if aproximate_model:
         dataset_labels = list(zip(test_entities, test_labels))
         path_explanations = os.path.join(current_model_path, 'explanations')
@@ -643,13 +708,13 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         effectiveness_results, \
         explanations_dicts, \
         paths_to_explanations, \
-        explain_stats = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf,
+        explain_stats = compute_effectiveness_kelpie(dataset_labels, dic_emb_classes, entity_to_neighbours, clf_extra,
                                                      results_summary, path_explanations, max_len_explanations,
                                                      explanation_limit, n_jobs)
         save_effectiveness_results(path_explanations, max_len_explanations, effectiveness_results,
                                    paths_to_explanations, explanations_dicts, path_individual_explanations)
         
-        random_effectiveness_results = compute_random(dataset_labels, clf, dic_emb_classes, entity_to_neighbours, explanations_dicts)
+        random_effectiveness_results = compute_random(dataset_labels, clf_extra, dic_emb_classes, entity_to_neighbours, explanations_dicts)
         # print(random_effectiveness_results)
         # raise
 
@@ -670,13 +735,14 @@ def train_classifier(train_embeddings, train_labels, test_embeddings, test_label
         random_effectiveness_results = [False, False]
         explain_stats = False
 
-    return clf, results_summary, effectiveness_results, random_effectiveness_results, explain_stats
+    return clf_extra, results_summary, effectiveness_results, random_effectiveness_results, explain_stats
 
 
-def save_model_results(dataset, clf, current_model_models_path, current_model_models_results_path, current_model_trained_path,
+def save_model_results(dataset, clf_extra, current_model_models_path, current_model_models_results_path, current_model_trained_path,
              results_summary):
     # transformer.save(os.path.join(current_model_models_path, f'RDF2Vec_{dataset}')) ## save transformer model
 
+    clf, lenc = clf_extra
     dump(clf, os.path.join(current_model_models_path, f'classifier_{dataset}')) ## save node classification model
 
     ## save grid search cv results although they are also saved with the joblib.dump
@@ -688,6 +754,7 @@ def save_model_results(dataset, clf, current_model_models_path, current_model_mo
             json.dump(str(clf.best_estimator_), f, ensure_ascii = False)
 
     ## save results summary for test set
+    results_summary = {key: str(value) for key, value in results_summary.items()}
     with open(os.path.join(current_model_models_results_path, 'results_summary.json'), 'w', encoding ='utf8') as f: 
             json.dump(results_summary, f, ensure_ascii = False)
     df = pd.DataFrame([results_summary])
